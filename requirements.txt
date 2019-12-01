@@ -1,0 +1,2 @@
+tensorflow>=2.0.0
+efficientnet>=1.0.0

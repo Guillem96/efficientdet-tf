@@ -22,9 +22,15 @@ class FastFusion(tf.keras.Model):
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w)
+        # (N_INPUTS, BATCH, H, W, C)
         weighted_sum = tf.map_fn(
             lambda i: w[i] * inputs[i], tf.range(self.size), dtype=tf.float32)
-        weighted_sum = tf.reduce_sum(weighted_sum, axis=0)
+        
+        # (BATCH, N_INPUTS, H, W, C)
+        weighted_sum = tf.transpose(weighted_sum, [1, 0 , 2, 3, 4])
+        # Sum weighted inputs
+        # (BATCH, H, W, C)
+        weighted_sum = tf.reduce_sum(weighted_sum, axis=1)
         fusioned_features = self.conv(weighted_sum / w_sum)
         fusioned_features = self.bn(fusioned_features)
         return self.relu(fusioned_features)
