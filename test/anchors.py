@@ -1,4 +1,4 @@
-from efficient_det.utils import anchors
+from efficientdet.utils import anchors
 
 
 def tile_anchors_test():

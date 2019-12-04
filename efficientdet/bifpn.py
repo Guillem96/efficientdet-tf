@@ -2,16 +2,30 @@ import tensorflow as tf
 
 EPSILON = 1e-5
 
+class Resize(tf.keras.Model):
+
+    def __init__(self, features, separable: bool = False):
+        conv_cls = (tf.keras.layers.SeparableConv2D 
+                    if separable else tf.keras.layers.Conv2D)
+        self.pixel_wise = conv_cls(features, kernel=1)
+
+    def call(self, images, target_dim):
+        dims = target_dim[1: 3]
+        x = tf.image.resize(images, dims) # Bilinear as default
+        return self.pixel_wise(x)
+
 
 class FastFusion(tf.keras.Model):
     def __init__(self, size, features):
         super(FastFusion, self).__init__()
         w_init = tf.random_normal_initializer()
+
         self.size = size
         self.w = tf.Variable(initial_value=w_init((size,)))
         self.conv = tf.keras.layers.SeparableConv2D(features, kernel_size=1)
         self.bn = tf.keras.layers.BatchNormalization()
         self.relu = tf.keras.layers.Activation('relu')
+        self.resize = Resize(features)
 
     def call(self, inputs):
         """
@@ -19,6 +33,10 @@ class FastFusion(tf.keras.Model):
         ----------
         inputs: List[tf.Tensor] of shape (BATCH, H, W, C)
         """
+        # The last feature map has to be resized according to the
+        # other inputs
+        inputs[-1] = self.resize(inputs[-1], inputs[0].shape)
+        
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w)
@@ -76,24 +94,16 @@ class BiFPNBlock(tf.keras.Model):
 
         # Compute the intermediate state
         # Note that P3 and P7 have no intermediate state
-        P6_td = self.ff_6_td([P6, self._resize(P7, P6.shape)])
-        P5_td = self.ff_5_td([P5, self._resize(P6_td, P5.shape)])
-        P4_td = self.ff_4_td([P4, self._resize(P5_td, P4.shape)])
+        P6_td = self.ff_6_td([P6, P7])
+        P5_td = self.ff_5_td([P5, P6_td])
+        P4_td = self.ff_4_td([P4, P5_td])
 
         # Compute out features maps
-        P3_out = self.ff_3_out([P3,
-                                self._resize(P4_td, P3.shape)])
-        P4_out = self.ff_4_out([P4,
-                                P4_td,
-                                self._resize(P3_out, P4.shape)])
-        P5_out = self.ff_5_out([P5,
-                                P5_td,
-                                self._resize(P4_out, P5.shape)])
-        P6_out = self.ff_6_out([P6,
-                                P6_td,
-                                self._resize(P5_out, P6.shape)])
-        P7_out = self.ff_7_out([P7,
-                                self._resize(P6_td, P7.shape)])
+        P3_out = self.ff_3_out([P3, P4_td])
+        P4_out = self.ff_4_out([P4, P4_td, P3_out])
+        P5_out = self.ff_5_out([P5, P5_td, P4_out])
+        P6_out = self.ff_6_out([P6, P6_td, P5_out])
+        P7_out = self.ff_7_out([P7, P6_td])
 
         return P3_out, P4_out, P5_out, P6_out, P7_out
 

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from efficient_det import losses
+from efficientdet import losses
 
 
 def focal_loss_test():

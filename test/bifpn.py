@@ -1,5 +1,5 @@
 import tensorflow as tf
-from efficient_det import BiFPN
+from efficientdet import BiFPN
 
 
 def _get_res_at_level_i(res, i):
