@@ -20,7 +20,8 @@ class RetinaNetBBPredictor(tf.keras.Model):
         x = features
         for fe in self.feature_extractors:
             x = fe(x)
-        return self.bb_regressor(x)
+        # TODO: Think of it
+        return tf.reshape(self.bb_regressor(x), [x.shape[0], -1])
 
 
 class RetinaNetClassifier(tf.keras.Model):
@@ -45,5 +46,5 @@ class RetinaNetClassifier(tf.keras.Model):
         x = features
         for fe in self.feature_extractors:
             x = fe(x)
-        return self.cls_score(x)
+        return tf.reshape(self.cls_score(x), [x.shape[0], -1])
 
