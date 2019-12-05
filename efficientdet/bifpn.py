@@ -2,12 +2,14 @@ import tensorflow as tf
 
 EPSILON = 1e-5
 
+
 class Resize(tf.keras.Model):
 
-    def __init__(self, features, separable: bool = False):
+    def __init__(self, features, separable: bool = True):
+        super(Resize, self).__init__()
         conv_cls = (tf.keras.layers.SeparableConv2D 
                     if separable else tf.keras.layers.Conv2D)
-        self.pixel_wise = conv_cls(features, kernel=1)
+        self.pixel_wise = conv_cls(features, kernel_size=1)
 
     def call(self, images, target_dim):
         dims = target_dim[1: 3]
@@ -40,12 +42,14 @@ class FastFusion(tf.keras.Model):
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w)
+
         # (N_INPUTS, BATCH, H, W, C)
         weighted_sum = tf.map_fn(
             lambda i: w[i] * inputs[i], tf.range(self.size), dtype=tf.float32)
         
         # (BATCH, N_INPUTS, H, W, C)
         weighted_sum = tf.transpose(weighted_sum, [1, 0 , 2, 3, 4])
+        
         # Sum weighted inputs
         # (BATCH, H, W, C)
         weighted_sum = tf.reduce_sum(weighted_sum, axis=1)

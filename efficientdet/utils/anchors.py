@@ -2,7 +2,7 @@ import math
 from typing import List
 
 import tensorflow as tf
-
+import numpy as np # TODO: Migrate to tf
 
 class AnchorGenerator(object):
     
@@ -19,41 +19,60 @@ class AnchorGenerator(object):
         self.stride = stride
 
         self.aspect_ratios = aspect_ratios
-        self.anchor_sizes = [
-            size,
-            size * 2 ** (1 / 3.0),
-            size * 2 ** (2 / 3.0)]
+        self.anchor_scales = [
+            2 ** 0,
+            2 ** (1 / 3.0),
+            2 ** (2 / 3.0)]
 
         self.anchors = self._generate()
     
-    def tile_anchors_over_feature_map(self):
-        shifts_x = tf.range(self.size * self.stride, delta=self.stride)
-        shifts_y = tf.range(self.size * self.stride, delta=self.stride)
-        shift_y, shift_x = tf.meshgrid(shifts_y, shifts_x)
-        shift_x = tf.reshape(shift_x, [-1])
-        shift_y = tf.reshape(shift_y, [-1])
-        
-        shifts = tf.stack([shift_x, shift_y, ] * 2, axis=1)
-        shifts = tf.reshape(shifts, [-1, 1, 4])
-        shifts = tf.cast(shifts, tf.float32)
-        
-        boxes = tf.expand_dims(self.anchors, axis=0)
+    def tile_anchors_over_feature_map(self, feature_map):
+        shift_x = (np.arange(0, feature_map.shape[0], step=self.stride) + 0.5)
+        shift_y = (np.arange(0, feature_map.shape[1], step=self.stride) + 0.5)
 
-        tiled_boxes = tf.reshape(shifts + boxes, [-1, 4])
+        shift_x, shift_y = np.meshgrid(shift_x, shift_y)
 
-        return tiled_boxes 
+        shifts = np.vstack((
+            shift_x.ravel(), shift_y.ravel(),
+            shift_x.ravel(), shift_y.ravel()
+        )).transpose()
+
+        # add A anchors (1, A, 4) to
+        # cell K shifts (K, 1, 4) to get
+        # shift anchors (K, A, 4)
+        # reshape to (K*A, 4) shifted anchors
+        A = len(self)
+        K = shifts.shape[0]
+        all_anchors = (self.anchors.reshape((1, A, 4)) 
+                       + shifts.reshape((1, K, 4)).transpose((1, 0, 2)))
+        all_anchors = all_anchors.reshape((K * A, 4))
+
+        return all_anchors
 
     def _generate(self) -> tf.Tensor:
-        anchors = []
-        for size in self.anchor_sizes:
-            area = size ** 2.0
-            for aspect_ratio in self.aspect_ratios:
-                w = math.sqrt(area / aspect_ratio)
-                h = aspect_ratio * w
-                x0, y0, x1, y1 = -w / 2.0, -h / 2.0, w / 2.0, h / 2.0
-                anchors.append([x0, y0, x1, y1])
-        return tf.stack(anchors)
+        num_anchors = len(self)
+        ratios = np.array(self.aspect_ratios)
+        scales = np.array(self.anchor_scales)
+
+        # initialize output anchors
+        anchors = np.zeros((num_anchors, 4))
+
+        # scale base_size
+        anchors[:, 2:] = self.size * np.tile(scales, (2, len(ratios))).T
+
+        # compute areas of anchors
+        areas = anchors[:, 2] * anchors[:, 3]
+
+        # correct for ratios
+        anchors[:, 2] = np.sqrt(areas / np.repeat(ratios, len(scales)))
+        anchors[:, 3] = anchors[:, 2] * np.repeat(ratios, len(scales))
+
+        # transform from (x_ctr, y_ctr, w, h) -> (x1, y1, x2, y2)
+        anchors[:, 0::2] -= np.tile(anchors[:, 2] * 0.5, (2, 1)).T
+        anchors[:, 1::2] -= np.tile(anchors[:, 3] * 0.5, (2, 1)).T
+
+        return anchors
 
     def __len__(self):
-        return len(self.aspect_ratios) * len(self.anchor_sizes)
+        return len(self.aspect_ratios) * len(self.anchor_scales)
     
