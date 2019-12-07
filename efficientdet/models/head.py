@@ -8,6 +8,7 @@ class RetinaNetBBPredictor(tf.keras.Model):
                  depth: int, 
                  num_anchors: int = 9):
         super(RetinaNetBBPredictor, self).__init__()
+        self.num_anchors = num_anchors
         self.feature_extractors = [
             tf.keras.layers.Conv2D(width, 
                                    kernel_size=3,
@@ -21,7 +22,7 @@ class RetinaNetBBPredictor(tf.keras.Model):
         for fe in self.feature_extractors:
             x = fe(x)
         # TODO: Think of it
-        return tf.reshape(self.bb_regressor(x), [x.shape[0], -1])
+        return tf.reshape(self.bb_regressor(x), [x.shape[0], -1, self.num_anchors, 4])
 
 
 class RetinaNetClassifier(tf.keras.Model):
@@ -32,6 +33,9 @@ class RetinaNetClassifier(tf.keras.Model):
                  num_classes: int, 
                  num_anchors: int = 9):
         super(RetinaNetClassifier, self).__init__()
+        self.num_anchors = num_anchors
+        self.num_classes = num_classes
+
         self.feature_extractors = [
             tf.keras.layers.Conv2D(width, 
                                    kernel_size=3,
@@ -46,5 +50,5 @@ class RetinaNetClassifier(tf.keras.Model):
         x = features
         for fe in self.feature_extractors:
             x = fe(x)
-        return tf.reshape(self.cls_score(x), [x.shape[0], -1])
+        return tf.reshape(self.cls_score(x), [x.shape[0], -1, self.num_anchors, self.num_classes])
 

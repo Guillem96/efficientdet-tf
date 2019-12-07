@@ -17,6 +17,7 @@ def focal_loss(y_true: tf.Tensor,
         y_pred = tf.sigmoid(y_pred)
 
     y_true = tf.cast(y_true, tf.float32)
+    
     # if y == 1:
     #   pt = prob
     # else
@@ -33,5 +34,4 @@ def focal_loss(y_true: tf.Tensor,
         return tf.reduce_sum(loss)
 
     return loss
-
 

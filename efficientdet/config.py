@@ -1,39 +1,46 @@
-import yaml
+import typing
 
-CONFIG_PATH = 'efficientdet/config/efficientdet-config.yml'
 
 PHIs = list(range(0, 8))
 
 
+class EfficientDetBaseConfig(typing.NamedTuple):
+    # Input scaling
+    input_size: int = 512
+    # Backbone scaling
+    backbone: int = 0
+    # BiFPN scaling
+    Wbifpn: int = 64
+    Dbifpn: int = 2
+    # Box predictor head scaling
+    Dclass: int = 2
+
+
 class EfficientDetCompudScalig(object):
     def __init__(self, 
-                 config_path : str = CONFIG_PATH, 
+                 config : EfficientDetBaseConfig = EfficientDetBaseConfig(), 
                  D : int = 0):
-        assert D > len(PHIs), 'D must be between [0, 7]'
-
-        self.D = 0
-        
-        with open(config_path, 'r') as f:
-            self.base_conf = yaml.load(f, Loader=yaml.FullLoader)
-            self.base_conf = self.base_conf['EfficientNet']
+        assert 0 >= D < len(PHIs), 'D must be between [0, 7]'
+        self.D = D
+        self.base_conf = config
     
     @property
     def input_size(self):
-        return self.base_conf['input']['size'] + PHIs[self.D] * 128
+        return self.base_conf.input_size + PHIs[self.D] * 128
     
     @property
     def Wbifpn(self):
-        return self.base_conf['BiFPN']['W'] * 1.35 ** PHIs[self.D]
+        return int(self.base_conf.Wbifpn * 1.35 ** PHIs[self.D])
     
     @property
     def Dbifpn(self):
-        return self.base_conf['BiFPN']['D'] + PHIs[self.D]
+        return self.base_conf.Dbifpn + PHIs[self.D]
     
     @property
     def Dclass(self):
-        return self.base_conf['head']['D'] + int(PHIs[self.D] / 2)
+        return self.base_conf.Dclass + int(PHIs[self.D] / 2)
     
     @property
     def B(self):
-        return self.base_conf['backbone']['B']
+        return self.base_conf.backbone
     

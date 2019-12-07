@@ -1,9 +1,7 @@
 import tensorflow as tf
 
-import efficientdet.head as head
-import efficientdet.bifpn as bifpn
-import efficientdet.config as config
-import efficientdet.backbone as backbone
+from efficientdet import models
+from efficientdet import config
 
 
 class EfficientDet(tf.keras.Model):
@@ -26,17 +24,18 @@ class EfficientDet(tf.keras.Model):
                  D : int = 0, 
                  weights : str = 'imagenet'):
         super(EfficientDet, self).__init__()
-        self.config = config.EfficientDetCompudScalig(D)
-        self.backbone = (backbone
+        self.config = config.EfficientDetCompudScalig(D=D)
+        self.backbone = (models
                          .build_efficient_net_backbone(self.config.B, 
                                                        weights))
 
-        self.bifp = bifpn.BiFPN(self.config.Wbipn, self.config.Dbifpn)
+        self.bifp = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
 
-        self.class_head = head.RetinaNetClassifier(self.config.Wbipn,
+        self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
+                                                     self.config.Dclass,
+                                                     num_classes)
+        self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
                                                    self.config.Dclass)
-        self.bb_head = head.RetinaBBClassifier(self.config.Wbipn,
-                                               self.config.Dclass)
 
 
     def call(self, images):
@@ -45,11 +44,14 @@ class EfficientDet(tf.keras.Model):
         # List of [BATCH, H, W, C]
         bifnp_features = self.bifp(features)
 
-        # List of [BATCH, H, W, A * 4]
-        bboxes = tf.map_fn(self.bb_head, features)
-        # List of [BATCH, H, W, A * num_classes]
-        class_scores = tf.map_fn(self.class_head, features)
+        # List of [BATCH, A * 4]
+        bboxes = [self.bb_head(bf) for bf in bifnp_features]
 
-        # [BATCH, H, W, A * 4]
+        # List of [BATCH, A * num_classes]
+        class_scores = [self.class_head(bf) for bf in bifnp_features]
+
+        # # [BATCH, H, W, A * 4]
         bboxes = tf.concat(bboxes, axis=1)
         class_scores = tf.concat(class_scores, axis=1)
+
+        return bboxes, class_scores

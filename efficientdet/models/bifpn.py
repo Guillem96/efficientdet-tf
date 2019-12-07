@@ -5,17 +5,19 @@ EPSILON = 1e-5
 
 class Resize(tf.keras.Model):
 
-    def __init__(self, features, separable: bool = True):
+    def __init__(self, features, separable: bool = False):
         super(Resize, self).__init__()
         conv_cls = (tf.keras.layers.SeparableConv2D 
                     if separable else tf.keras.layers.Conv2D)
-        self.pixel_wise = conv_cls(features, kernel_size=1)
+        self.antialiasing_conv = conv_cls(features, 
+                                          kernel_size=3, 
+                                          padding='same')
 
-    def call(self, images, target_dim):
+    def call(self, images, target_dim=None):
         dims = target_dim[1: 3]
         x = tf.image.resize(images, dims) # Bilinear as default
-        return self.pixel_wise(x)
-
+        x = self.antialiasing_conv(x)
+        return x 
 
 class FastFusion(tf.keras.Model):
     def __init__(self, size, features):
@@ -38,7 +40,7 @@ class FastFusion(tf.keras.Model):
         # The last feature map has to be resized according to the
         # other inputs
         inputs[-1] = self.resize(inputs[-1], inputs[0].shape)
-        
+
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w)
@@ -63,6 +65,10 @@ class BiFPNBlock(tf.keras.Model):
     def __init__(self, features):
         super(BiFPNBlock, self).__init__()
 
+        # One pixel-wise for each feature comming from the 
+        # bottom-up path
+        self.pixel_wise = [tf.keras.layers.Conv2D(features, kernel_size=1)
+                            for _ in range(5)] 
         # Feature fusion for intermediate level
         # ff stands for Feature fusion
         # td refers to intermediate level
@@ -77,11 +83,6 @@ class BiFPNBlock(tf.keras.Model):
         self.ff_4_out = FastFusion(3, features)
         self.ff_3_out = FastFusion(2, features)
 
-    def _resize(self, im, dims):
-        # im: [BATCH, H, W, C]
-        dims = dims[1: 3]
-        return tf.image.resize(im, dims) # Bilinear as default
-
     def call(self, inputs):
         """
         Computes the feature fusion of bottom-up features comming
@@ -94,7 +95,9 @@ class BiFPNBlock(tf.keras.Model):
             backbone neural network
         """
         # Each Pin has shape (BATCH, HEIGHT, WIDTH, CHANNELS)
-        P3, P4, P5, P6, P7 = inputs
+        # We first reduce the channels using a pixel-wise conv
+        features = [self.pixel_wise[i](inputs[i]) for i in range(len(inputs))]
+        P3, P4, P5, P6, P7 = features
 
         # Compute the intermediate state
         # Note that P3 and P7 have no intermediate state
