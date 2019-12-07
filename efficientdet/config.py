@@ -25,22 +25,22 @@ class EfficientDetCompudScalig(object):
         self.base_conf = config
     
     @property
-    def input_size(self):
+    def input_size(self) -> int:
         return self.base_conf.input_size + PHIs[self.D] * 128
     
     @property
-    def Wbifpn(self):
+    def Wbifpn(self) -> int:
         return int(self.base_conf.Wbifpn * 1.35 ** PHIs[self.D])
     
     @property
-    def Dbifpn(self):
+    def Dbifpn(self) -> int:
         return self.base_conf.Dbifpn + PHIs[self.D]
     
     @property
-    def Dclass(self):
+    def Dclass(self) -> int:
         return self.base_conf.Dclass + int(PHIs[self.D] / 2)
     
     @property
-    def B(self):
+    def B(self) -> int:
         return self.base_conf.backbone
     

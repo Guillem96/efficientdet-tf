@@ -11,3 +11,6 @@ venv/
 
 # Visual Studio Code
 .vscode/
+
+# Datasets
+/data/
