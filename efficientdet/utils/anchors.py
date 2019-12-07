@@ -1,8 +1,24 @@
+"""
+Copyright 2017-2018 Fizyr (https://fizyr.com)
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import math
-from typing import List
+from typing import List, Union, Tuple
 
 import tensorflow as tf
 import numpy as np # TODO: Migrate to tf
+
+from . import compute_overlap as iou
+
 
 class AnchorGenerator(object):
     
@@ -75,4 +91,174 @@ class AnchorGenerator(object):
 
     def __len__(self):
         return len(self.aspect_ratios) * len(self.anchor_scales)
+
+
+def anchor_targets_bbox(anchors: np.ndarray,
+                        images: np.ndarray,
+                        bndboxes: np.ndarray,
+                        labels: np.ndarray,
+                        num_classes: int,
+                        negative_overlap: float = 0.4,
+                        positive_overlap: float = 0.5) -> Tuple[np.ndarray,
+                                                                np.ndarray]:
+    """ 
+    Generate anchor targets for bbox detection.
+
+    Parameters
+    ----------
+    anchors: np.ndarray 
+        Annotations of shape (N, 4) for (x1, y1, x2, y2).
+    images: np.ndarray
+        Array of shape [BATCH, H, W, C] containing images.
+    bndboxes: np.ndarray
+        Array of shape [BATCH, N, 4] contaning ground truth boxes
+    labels: np.ndarray
+        Array of shape [BATCH, N] containing the labels for each box
+    num_classes: int
+        Number of classes to predict.
+    negative_overlap: float, default 0.4
+        IoU overlap for negative anchors 
+        (all anchors with overlap < negative_overlap are negative).
+    positive_overlap: float, default 0.5
+        IoU overlap or positive anchors 
+        (all anchors with overlap > positive_overlap are positive).
+
+    Returns
+    --------
+    Tuple[np.ndarray, np.ndarray]
+        labels_batch: 
+            batch that contains labels & anchor states 
+            (np.array of shape (batch_size, N, num_classes + 1),
+            where N is the number of anchors for an image and the last 
+            column defines the anchor state (-1 for ignore, 0 for bg, 1 for fg).
+        regression_batch: 
+            batch that contains bounding-box regression targets for an 
+            image & anchor states (np.array of shape (batch_size, N, 4 + 1),
+            where N is the number of anchors for an image, the first 4 columns 
+            define regression targets for (x1, y1, x2, y2) and the
+            last column defines anchor states (-1 for ignore, 0 for bg, 1 for fg).
+    """
+    batch_size = images.shape[0]
+
+    regression_batch = np.zeros((batch_size, anchors.shape[0], 4 + 1))
+    labels_batch = np.zeros((batch_size, anchors.shape[0], num_classes + 1))
+
+    # compute labels and regression targets
+    for batch_idx, (image, bboxes, label) in enumerate(zip(images, bndboxes, labels)):
+        if bboxes.shape[0]:
+            # obtain indices of gt annotations with the greatest overlap
+            result = compute_gt_annotations(anchors,
+                                            bboxes, 
+                                            negative_overlap, 
+                                            positive_overlap)
+            positive_indices, ignore_indices, argmax_overlaps_inds = result
+
+            labels_batch[batch_idx, ignore_indices, -1] = -1 # Ignore
+            labels_batch[batch_idx, positive_indices, -1] = 1 # Foreground
+
+            regression_batch[batch_idx, ignore_indices, -1] = -1 # Ignore
+            regression_batch[batch_idx, positive_indices, -1] = 1 # Foreground
+
+            # compute target class labels
+            labels_batch[batch_idx, 
+                         positive_indices,
+                         label[argmax_overlaps_inds[positive_indices]]] = 1
+
+            regression_batch[batch_idx, :, :-1] = \
+                bbox_transform(anchors, 
+                               bboxes[argmax_overlaps_inds])
+
+        # ignore annotations outside of image
+        if image.shape:
+            anchors_centers = np.vstack([(anchors[:, 0] + anchors[:, 2]) / 2, 
+                                         (anchors[:, 1] + anchors[:, 3]) / 2]).T
+            indices = np.logical_or(anchors_centers[:, 0] >= image.shape[1], 
+                                    anchors_centers[:, 1] >= image.shape[0])
+
+            labels_batch[batch_idx, indices, -1] = -1
+            regression_batch[batch_idx, indices, -1] = -1
+
+    return regression_batch, labels_batch
+
+
+def compute_gt_annotations(anchors: np.ndarray,
+                           annotations: np.ndarray,
+                           negative_overlap=0.4,
+                           positive_overlap=0.5) -> Tuple[np.ndarray,
+                                                          np.ndarray,
+                                                          np.ndarray]:
+    """ 
+    Obtain indices of gt annotations with the greatest overlap.
     
+    Parameters
+    ----------
+        anchors: np.array
+            Annotations of shape [N, 4] for (x1, y1, x2, y2).
+        annotations: np.array 
+            shape [N, 5] for (x1, y1, x2, y2).
+        negative_overlap: float, default 0.4
+            IoU overlap for negative anchors 
+            (all anchors with overlap < negative_overlap are negative).
+        positive_overlap: float, default 0.5
+            IoU overlap or positive anchors 
+            (all anchors with overlap > positive_overlap are positive).
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        positive_indices: indices of positive anchors
+        ignore_indices: indices of ignored anchors
+        argmax_overlaps_inds: ordered overlaps indices
+    """
+
+    overlaps = iou.compute_overlap(anchors.astype(np.float64), 
+                                   annotations.astype(np.float64))
+    argmax_overlaps_inds = np.argmax(overlaps, axis=1)
+    max_overlaps = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
+
+    # assign "dont care" labels
+    positive_indices = max_overlaps >= positive_overlap
+    ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
+
+    return positive_indices, ignore_indices, argmax_overlaps_inds
+
+
+_ListOfInt = List[int]
+_TupleOfInt = Tuple[int, int, int, int]
+_MeanStd = Union[np.ndarray, _ListOfInt, _TupleOfInt]
+
+def bbox_transform(anchors: np.ndarray, 
+                   gt_boxes: np.ndarray, 
+                   mean: _MeanStd = None, 
+                   std: _MeanStd = None) -> np.ndarray:
+    """Compute bounding-box regression targets for an image."""
+
+    if mean is None:
+        mean = np.array([0, 0, 0, 0])
+    if std is None:
+        std = np.array([0.2, 0.2, 0.2, 0.2])
+
+    if isinstance(mean, (list, tuple)):
+        mean = np.array(mean)
+    elif not isinstance(mean, np.ndarray):
+        raise ValueError('Expected mean to be a np.ndarray, list or tuple. Received: {}'.format(type(mean)))
+
+    if isinstance(std, (list, tuple)):
+        std = np.array(std)
+    elif not isinstance(std, np.ndarray):
+        raise ValueError('Expected std to be a np.ndarray, list or tuple. Received: {}'.format(type(std)))
+
+    anchor_widths  = anchors[:, 2] - anchors[:, 0]
+    anchor_heights = anchors[:, 3] - anchors[:, 1]
+
+    targets_dx1 = (gt_boxes[:, 0] - anchors[:, 0]) / anchor_widths
+    targets_dy1 = (gt_boxes[:, 1] - anchors[:, 1]) / anchor_heights
+    targets_dx2 = (gt_boxes[:, 2] - anchors[:, 2]) / anchor_widths
+    targets_dy2 = (gt_boxes[:, 3] - anchors[:, 3]) / anchor_heights
+
+    targets = np.stack((targets_dx1, targets_dy1, targets_dx2, targets_dy2))
+    targets = targets.T
+
+    targets = (targets - mean) / std
+
+    return targets

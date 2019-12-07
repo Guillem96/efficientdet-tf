@@ -84,7 +84,20 @@ def _load_image(im_path: str,
 def _annot_gen(annot_file: Sequence[Path]):
     for f in annot_file:
         yield _read_voc_annot(str(f))
-        
+
+
+def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor, 
+                 to_size: Tuple[int, int]):
+    h, w = to_size
+
+    x1, y1, x2, y2 = tf.split(boxes, 4, axis=1)
+    x1 *= w
+    x2 *= w
+    y1 *= h
+    y2 *= h
+    
+    return labels, tf.concat([x1, y1, x2, y2], axis=1)
+
 
 def build_dataset(dataset_path: Union[str, Path],
                   im_input_size: Tuple[int, int],
@@ -132,6 +145,7 @@ def build_dataset(dataset_path: Union[str, Path],
     # Partially evaluate image loader to resize images
     # always with the same shape
     load_im = partial(_load_image, im_size=im_input_size)
+    scale_boxes = partial(_scale_boxes, to_size=im_input_size)
 
     # We assume that tf datasets list files sorted when shuffle=False
     im_ds = (tf.data.Dataset.list_files(str(im_path / '*.jpg'), 
@@ -139,7 +153,8 @@ def build_dataset(dataset_path: Union[str, Path],
              .map(load_im))
     annot_ds = (tf.data.Dataset
                 .from_generator(generator=lambda: _annot_gen(annot_files), 
-                                output_types=(tf.int32, tf.float32)))
+                                output_types=(tf.int32, tf.float32))
+                .map(scale_boxes))
 
     # Join both datasets
     ds = (tf.data.Dataset.zip((im_ds, annot_ds))

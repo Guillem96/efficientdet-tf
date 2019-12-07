@@ -14,3 +14,7 @@ venv/
 
 # Datasets
 /data/
+
+# Compute overlap
+compute_overlap.c
+*.so
