@@ -51,30 +51,30 @@ class AnchorsTest(unittest.TestCase):
             anchors = anchors_gen.tile_anchors_over_feature_map(im[0])
             
             gt_reg, gt_labels = \
-                utils.anchors.anchor_targets_bbox(anchors, 
+                utils.anchors.anchor_targets_bbox(anchors.numpy(), 
                                                   im.numpy(), 
                                                   bbs.numpy(), l.numpy(), 
                                                   len(voc.IDX_2_LABEL))
-            nearest_anchors = anchors[gt_reg[0, :, -1] == 1]
+            nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
             
-            # im_random = im[0].numpy()
-            # for box in nearest_anchors:
-            #     box = box.astype('int32')
-            #     cv2.rectangle(im_random, 
-            #                   (box[0], box[1]), 
-            #                   (box[2], box[3]), (0, 255, 0), 1)
+    #         im_random = im[0].numpy()
+    #         for box in nearest_anchors:
+    #             box = box.astype('int32')
+    #             cv2.rectangle(im_random, 
+    #                           (box[0], box[1]), 
+    #                           (box[2], box[3]), (0, 255, 0), 1)
 
-            # for box in bbs.numpy()[0]:
-            #     box = box.astype('int32')
-            #     cv2.rectangle(im_random, 
-            #                   (box[0], box[1]), 
-            #                   (box[2], box[3]), (0, 0, 255), 1)
+    #         for box in bbs.numpy()[0]:
+    #             box = box.astype('int32')
+    #             cv2.rectangle(im_random, 
+    #                           (box[0], box[1]), 
+    #                           (box[2], box[3]), (0, 0, 255), 1)
             
-            # for label in l[0]:
-            #     print(voc.IDX_2_LABEL[int(label)])
+    #         for label in l[0]:
+    #             print(voc.IDX_2_LABEL[int(label)])
 
-            # cv2.imshow('', im_random)
-            # cv2.waitKey()
+    #         cv2.imshow('', im_random)
+    #         cv2.waitKey()
 
             print('GT shapes:', gt_labels.shape, gt_reg.shape)
             print('Found any overlapping anchor?', 

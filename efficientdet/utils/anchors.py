@@ -43,15 +43,18 @@ class AnchorGenerator(object):
         self.anchors = self._generate()
     
     def tile_anchors_over_feature_map(self, feature_map):
-        shift_x = (np.arange(0, feature_map.shape[0], step=self.stride) + 0.5)
-        shift_y = (np.arange(0, feature_map.shape[1], step=self.stride) + 0.5)
+        def arange(limit):
+            return tf.range(0, limit, dtype=tf.float32)
 
-        shift_x, shift_y = np.meshgrid(shift_x, shift_y)
+        shift_x = (arange(feature_map.shape[0]) + 0.5) * self.stride
+        shift_y = (arange(feature_map.shape[1]) + 0.5) * self.stride
 
-        shifts = np.vstack((
-            shift_x.ravel(), shift_y.ravel(),
-            shift_x.ravel(), shift_y.ravel()
-        )).transpose()
+        shift_x, shift_y = tf.meshgrid(shift_x, shift_y)
+        shift_x = tf.reshape(shift_x, [-1])
+        shift_y = tf.reshape(shift_y, [-1])
+
+        shifts = tf.stack([shift_x, shift_y] * 2, axis=0)
+        shifts = tf.transpose(shifts)
 
         # add A anchors (1, A, 4) to
         # cell K shifts (K, 1, 4) to get
@@ -59,9 +62,10 @@ class AnchorGenerator(object):
         # reshape to (K*A, 4) shifted anchors
         A = len(self)
         K = shifts.shape[0]
-        all_anchors = (self.anchors.reshape((1, A, 4)) 
-                       + shifts.reshape((1, K, 4)).transpose((1, 0, 2)))
-        all_anchors = all_anchors.reshape((K * A, 4))
+    
+        all_anchors = (tf.reshape(self.anchors, [1, A, 4]) 
+                       + tf.cast(tf.reshape(shifts, [K, 1, 4]), tf.float64))
+        all_anchors = tf.reshape(all_anchors, [K * A, 4])
 
         return all_anchors
 
