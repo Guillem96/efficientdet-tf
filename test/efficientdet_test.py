@@ -2,7 +2,9 @@ import unittest
 
 import tensorflow as tf
 
+import efficientdet.data.voc as voc
 import efficientdet.models as models
+
 
 class EfficientDetTest(unittest.TestCase):
 
@@ -12,16 +14,20 @@ class EfficientDetTest(unittest.TestCase):
                 self.assertEqual(s1, s2)
 
     def test_forward(self):
-        num_classes = 2
         batch_size = 2
+        num_classes = len(voc.IDX_2_LABEL)
         model = models.EfficientDet(num_classes=num_classes,
-                                    D=0, 
+                                    D=0,
                                     weights=None)
 
         input_size = model.config.input_size
-        inputs = tf.random.uniform([batch_size, input_size, input_size, 3], dtype=tf.float32)
 
-        bb, clf = model(inputs)
+        ds = voc.build_dataset('test/data/VOC2007',
+                               batch_size=batch_size,
+                               im_input_size=(input_size, input_size))
+
+        for images, annotations in ds.take(1):
+            bb, clf = model([images, annotations], training=True)
 
         self._compare_shapes(bb.shape, [batch_size, None, 9, 4])
         self._compare_shapes(clf.shape, [batch_size, None, 9, num_classes])

@@ -5,13 +5,12 @@ import numpy as np
 
 import efficientdet.utils as utils
 import efficientdet.data.voc as voc
-
+import efficientdet.config as config
 
 def _get_res_at_level_i(res, i):
     return int(res / (2**i))
 
-sizes = [32, 64, 128, 256, 512]
-strides = [8, 16, 32, 64, 128]
+anchors_config = config.AnchorsConfig()
 
 class AnchorsTest(unittest.TestCase):
     
@@ -21,9 +20,9 @@ class AnchorsTest(unittest.TestCase):
         im_random = np.zeros((feature_size, feature_size, 3))
 
         anchors_gen = utils.anchors.AnchorGenerator(
-            size=sizes[level - 3],
-            aspect_ratios=[.5, 1, 2],
-            stride=strides[level - 3])
+            size=anchors_config.sizes[level - 3],
+            aspect_ratios=anchors_config.ratios,
+            stride=anchors_config.strides[level - 3])
         
         boxes = anchors_gen.tile_anchors_over_feature_map(im_random)
 
@@ -43,9 +42,9 @@ class AnchorsTest(unittest.TestCase):
                                im_input_size=(256, 256))
 
         anchors_gen = utils.anchors.AnchorGenerator(
-            size=sizes[level - 3],
-            aspect_ratios=[.5, 1, 2],
-            stride=strides[level - 3])
+            size=anchors_config.sizes[level - 3],
+            aspect_ratios=anchors_config.ratios,
+            stride=anchors_config.strides[level - 3])
         
         for im, (l, bbs) in ds.take(1):
             anchors = anchors_gen.tile_anchors_over_feature_map(im[0])
