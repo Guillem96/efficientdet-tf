@@ -51,23 +51,16 @@ class EfficientDet(tf.keras.Model):
 
     def _compute_gt_anchors(self, feature_anchors, inputs):
         images, (labels, bndboxes) = inputs
+        
         # TODO: No depend on numpy while training
-        anchors = tf.concat(feature_anchors, axis=1)
-        regression_targets = []
-        clf_targets = []
-        print(anchors.shape)
-        for batch_idx in range(anchors.shape[0]):
-            reg, clf = \
-                utils.anchors.anchor_targets_bbox(anchors[batch_idx].numpy(), 
-                                                  images.numpy(), 
-                                                  bndboxes.numpy(), 
-                                                  labels.numpy(), 
-                                                  self.num_classes)
-            regression_targets.append(reg)
-            clf_targets.append(clf)
+        reg, clf = \
+            utils.anchors.anchor_targets_bbox(feature_anchors.numpy(), 
+                                              images.numpy(), 
+                                              bndboxes.numpy(), 
+                                              labels.numpy(), 
+                                              self.num_classes)
 
-        return tf.stack(regression_targets), tf.stack(clf_targets)
-
+        return tf.constant(reg), tf.constant(clf)
 
     def call(self, inputs: List[tf.Tensor], training: bool = True):
         """
@@ -97,11 +90,6 @@ class EfficientDet(tf.keras.Model):
         # List of [BATCH, H, W, C]
         bifnp_features = self.bifpn(features)
 
-        # Create the anchors and the respective ground truths
-        anchors = [anchor_gen(f, batch_wise=True)
-                  for anchor_gen, f in zip(self.anchors_gen, bifnp_features)]
-        reg_targets, clf_targets = self._compute_gt_anchors(anchors, inputs)
-
         # List of [BATCH, A * 4]
         bboxes = [self.bb_head(bf) for bf in bifnp_features]
 
@@ -112,4 +100,29 @@ class EfficientDet(tf.keras.Model):
         bboxes = tf.concat(bboxes, axis=1)
         class_scores = tf.concat(class_scores, axis=1)
 
-        return bboxes, class_scores
+        # Create the anchors
+        anchors = [anchor_gen(f[0])
+                  for anchor_gen, f in zip(self.anchors_gen, bifnp_features)]
+        anchors = tf.concat(anchors, axis=0)
+
+        if training:
+            # In case we are in training mode, we have access to ground truths
+            reg_targets, clf_targets = self._compute_gt_anchors(anchors, inputs)
+            # TODO: Compute loss
+            return bboxes, class_scores
+        else:
+            # Tile anchors over batches, so they can be regressed
+            batch_size = bboxes.shape[0]
+            anchors = tf.tile(tf.expand_dims(anchors, 0), 
+                              [bboxes.shape[0], 1, 1])
+            
+            class_scores = tf.reshape(class_scores, 
+                                      [batch_size, -1, self.num_classes])
+            bboxes = tf.reshape(bboxes, 
+                                [batch_size, -1, 4])
+
+            boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
+            boxes = utils.bndbox.clip_boxes(boxes, images.shape[1:3])
+            boxes, labels = utils.bndbox.nms(boxes, class_scores)
+            # TODO: Pad output
+            return boxes, labels

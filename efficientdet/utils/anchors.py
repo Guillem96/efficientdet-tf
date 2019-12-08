@@ -45,7 +45,7 @@ class AnchorGenerator(object):
     def __call__(self, *args, **kwargs):
         return self.tile_anchors_over_feature_map(*args, **kwargs)
 
-    def tile_anchors_over_feature_map(self, feature_map, batch_wise=False):
+    def tile_anchors_over_feature_map(self, feature_map):
         """
         Tile anchors over all feature map positions
 
@@ -53,10 +53,6 @@ class AnchorGenerator(object):
         ----------
         feature_map: tf.Tensor
             Feature map where anchors are going to be tiled
-        batch_wise: bool
-            Wether the feature map is batched or not
-            if batch_wise == True then the anchors will be repeated over the
-            whole batch
         
         Returns
         --------
@@ -65,8 +61,8 @@ class AnchorGenerator(object):
         def arange(limit):
             return tf.range(0, limit, dtype=tf.float32)
         
-        h = feature_map.shape[1] if batch_wise else feature_map[0]
-        w = feature_map.shape[2] if batch_wise else feature_map[1]
+        h = feature_map.shape[0]
+        w = feature_map.shape[1]
 
         shift_x = (arange(w) + 0.5) * self.stride
         shift_y = (arange(h) + 0.5) * self.stride
@@ -88,11 +84,6 @@ class AnchorGenerator(object):
         all_anchors = (tf.reshape(self.anchors, [1, A, 4]) 
                        + tf.cast(tf.reshape(shifts, [K, 1, 4]), tf.float64))
         all_anchors = tf.reshape(all_anchors, [K * A, 4])
-
-        if batch_wise: # If feature_map is batched repeat it over the batch
-            all_anchors = tf.expand_dims(all_anchors, 0)
-            all_anchors = tf.tile(all_anchors, 
-                                  [feature_map.shape[0], 1, 1])
 
         return all_anchors
 
