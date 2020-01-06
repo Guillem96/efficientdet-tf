@@ -106,10 +106,9 @@ class EfficientDet(tf.keras.Model):
         anchors = tf.concat(anchors, axis=0)
 
         if training:
-            # In case we are in training mode, we have access to ground truths
-            reg_targets, clf_targets = self._compute_gt_anchors(anchors, inputs)
-            # TODO: Compute loss
-            return bboxes, class_scores
+            # # In case we are in training mode, we have access to ground truths
+            # reg_targets, clf_targets = self._compute_gt_anchors(anchors, inputs)
+            return bboxes, class_scores, anchors
         else:
             # Tile anchors over batches, so they can be regressed
             batch_size = bboxes.shape[0]

@@ -16,7 +16,7 @@ class BiFPNTest(unittest.TestCase):
         model = BiFPN()
 
         resolutions = [_get_res_at_level_i(input_res, i)
-                    for i in range(3, 8)]
+                       for i in range(3, 8)]
         Ps = [tf.random.uniform([batch_size, r, r, 64]) 
             for r in resolutions]
 

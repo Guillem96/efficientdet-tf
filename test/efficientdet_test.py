@@ -48,7 +48,7 @@ class EfficientDetTest(unittest.TestCase):
                                im_input_size=(input_size, input_size))
 
         for images, annotations in ds.take(1):
-            boxes, labels = model([images, annotations], training=False)
+            boxes, labels = model(images, training=False)
         
         # TODO: migrate to tensors when output is padded
         for i in range(len(boxes)):

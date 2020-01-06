@@ -35,3 +35,22 @@ def focal_loss(y_true: tf.Tensor,
 
     return loss
 
+
+def huber_loss(y_true: tf.Tensor, 
+               y_pred: tf.Tensor, 
+               clip_delta: float = 1.0,
+               reduction: str = 'sum'):
+    error = y_true - y_pred
+    cond  = tf.abs(error) < clip_delta
+
+    squared_loss = 0.5 * tf.square(error)
+    linear_loss  = clip_delta * (tf.abs(error) - 0.5 * clip_delta)
+
+    loss = tf.where(cond, squared_loss, linear_loss)
+
+    if reduction == 'mean':
+        return tf.reduce_mean(loss)
+    elif reduction == 'sum':
+        return tf.reduce_sum(loss)
+
+    return loss

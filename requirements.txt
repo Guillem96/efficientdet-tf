@@ -1,3 +1,5 @@
 tensorflow>=2.0.0
 efficientnet>=1.0.0
 opencv-python>=4.1.2.30
+
+Click

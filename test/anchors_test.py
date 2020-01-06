@@ -27,11 +27,11 @@ class AnchorsTest(unittest.TestCase):
         
         boxes = anchors_gen.tile_anchors_over_feature_map(im_random)
 
-        for box in boxes:
+        for box in boxes.numpy():
             box = box.astype('int32')
             cv2.rectangle(im_random, 
-                        (box[0], box[1]), 
-                        (box[2], box[3]), (0, 255, 0), 1)
+                          (box[0], box[1]), 
+                          (box[2], box[3]), (0, 255, 0), 1)
 
         cv2.imshow('', im_random)
         cv2.waitKey()
