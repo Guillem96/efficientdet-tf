@@ -32,7 +32,7 @@ class NMSTest(unittest.TestCase):
         sizes = (80, 40, 20, 10, 5)
         
         for im, (l, bbs) in ds.take(1):
-            anchors = [anchor_gen(tf.random.uniform((size, size, 3)))
+            anchors = [anchor_gen((size, size, 3))
                         for anchor_gen, size in zip(anchors_gen, sizes)]
             anchors = tf.concat(anchors, axis=0)
             

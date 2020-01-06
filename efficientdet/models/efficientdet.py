@@ -17,6 +17,7 @@ class EfficientDet(tf.keras.Model):
         EfficientDet architecture based on a compound scaling,
         to better understand this parameter refer to EfficientDet 
         paper 4.2 section
+    freeze_backbone: bool, default False
     weights: str, default 'imagenet'
         If set to 'imagenet' then the backbone will be pretrained
         on imagenet. If set to None, the backbone will be random
@@ -25,7 +26,9 @@ class EfficientDet(tf.keras.Model):
     def __init__(self, 
                  num_classes: int,
                  D : int = 0, 
+                 freeze_backbone: bool = False,
                  weights : str = 'imagenet'):
+                 
         super(EfficientDet, self).__init__()
         self.config = config.EfficientDetCompudScaling(D=D)
         self.anchors_config = config.AnchorsConfig()
@@ -34,6 +37,7 @@ class EfficientDet(tf.keras.Model):
         self.backbone = (models
                          .build_efficient_net_backbone(self.config.B, 
                                                        weights))
+        self.backbone.trainable = freeze_backbone
 
         self.bifpn = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
 
@@ -49,44 +53,19 @@ class EfficientDet(tf.keras.Model):
             stride=self.anchors_config.strides[i - 3]
         ) for i in range(3, 8)] # 3 to 7 pyramid levels
 
-    def _compute_gt_anchors(self, feature_anchors, inputs):
-        images, (labels, bndboxes) = inputs
-        
-        # TODO: No depend on numpy while training
-        reg, clf = \
-            utils.anchors.anchor_targets_bbox(feature_anchors.numpy(), 
-                                              images.numpy(), 
-                                              bndboxes.numpy(), 
-                                              labels.numpy(), 
-                                              self.num_classes)
-
-        return tf.constant(reg), tf.constant(clf)
-
-    def call(self, inputs: List[tf.Tensor], training: bool = True):
+    def call(self, images, training: bool = True):
         """
         EfficientDet forward step
 
         Parameters
         ----------
-        inputs: List[tf.Tensor]
-            List with 2 positions containing batch of images
-            and the annotations for each image.
-            Annotations is a tuple of two elements:
-                annotations[0] == labels, annotations[1] == bounding boxes
+        images: tf.Tensor
         training: bool
             Wether if model is training or it is in inference mode
 
-        Examples
-        --------
-        >>> model = EfficientDet(num_classes=2)
-        >>> images = tf.random.uniform([2, 128, 128, 128]) # Mock images
-        >>> labels = tf.random.uniform([2, 1], maxval=2, dtype=tf.int32)
-        >>> boxes = ... # Random boxes with shape [2, 1, 4] # One box per label
-        >>> model([images, (labels, boxes)], training=True)
         """
-        images, (labels, bndboxes) = inputs
         features = self.backbone(images)
-
+        
         # List of [BATCH, H, W, C]
         bifnp_features = self.bifpn(features)
 
@@ -100,16 +79,15 @@ class EfficientDet(tf.keras.Model):
         bboxes = tf.concat(bboxes, axis=1)
         class_scores = tf.concat(class_scores, axis=1)
 
-        # Create the anchors
-        anchors = [anchor_gen(f[0])
-                  for anchor_gen, f in zip(self.anchors_gen, bifnp_features)]
-        anchors = tf.concat(anchors, axis=0)
-
         if training:
-            # # In case we are in training mode, we have access to ground truths
-            # reg_targets, clf_targets = self._compute_gt_anchors(anchors, inputs)
-            return bboxes, class_scores, anchors
+            return bboxes, class_scores
+
         else:
+            # Create the anchors
+            anchors = [anchor_gen(f[0].shape)
+                       for anchor_gen, f in zip(self.anchors_gen, bifnp_features)]
+            anchors = tf.concat(anchors, axis=0)
+            
             # Tile anchors over batches, so they can be regressed
             batch_size = bboxes.shape[0]
             anchors = tf.tile(tf.expand_dims(anchors, 0), 

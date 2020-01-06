@@ -7,6 +7,9 @@ def focal_loss(y_true: tf.Tensor,
                from_logits: bool = False,
                reduction: str = 'sum'):
 
+    y_true = tf.reshape(y_true, [-1])
+    y_pred = tf.reshape(y_pred, [-1])
+
     bce_fn = tf.losses.BinaryCrossentropy(
         from_logits=from_logits,
         reduction=tf.losses.Reduction.NONE)
@@ -40,6 +43,10 @@ def huber_loss(y_true: tf.Tensor,
                y_pred: tf.Tensor, 
                clip_delta: float = 1.0,
                reduction: str = 'sum'):
+
+    y_pred = tf.cast(y_pred, tf.float32)
+    y_true = tf.cast(y_true, tf.float32)
+
     error = y_true - y_pred
     cond  = tf.abs(error) < clip_delta
 

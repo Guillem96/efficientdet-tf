@@ -45,13 +45,13 @@ class AnchorGenerator(object):
     def __call__(self, *args, **kwargs):
         return self.tile_anchors_over_feature_map(*args, **kwargs)
 
-    def tile_anchors_over_feature_map(self, feature_map):
+    def tile_anchors_over_feature_map(self, feature_map_shape):
         """
         Tile anchors over all feature map positions
 
         Parameters
         ----------
-        feature_map: tf.Tensor
+        feature_map: Tuple[int, int, int] H, W , C
             Feature map where anchors are going to be tiled
         
         Returns
@@ -61,8 +61,8 @@ class AnchorGenerator(object):
         def arange(limit):
             return tf.range(0, limit, dtype=tf.float32)
         
-        h = feature_map.shape[0]
-        w = feature_map.shape[1]
+        h = feature_map_shape[0]
+        w = feature_map_shape[1]
 
         shift_x = (arange(w) + 0.5) * self.stride
         shift_y = (arange(h) + 0.5) * self.stride
@@ -120,6 +120,7 @@ def anchor_targets_bbox(anchors: np.ndarray,
                         bndboxes: np.ndarray,
                         labels: np.ndarray,
                         num_classes: int,
+                        padding_value: int = -1,
                         negative_overlap: float = 0.4,
                         positive_overlap: float = 0.5) -> Tuple[np.ndarray,
                                                                 np.ndarray]:
@@ -144,7 +145,8 @@ def anchor_targets_bbox(anchors: np.ndarray,
     positive_overlap: float, default 0.5
         IoU overlap or positive anchors 
         (all anchors with overlap > positive_overlap are positive).
-
+    padding_value: int
+        Value used to pad labels
     Returns
     --------
     Tuple[np.ndarray, np.ndarray]
@@ -170,10 +172,16 @@ def anchor_targets_bbox(anchors: np.ndarray,
         if bboxes.shape[0]:
             # obtain indices of gt annotations with the greatest overlap
             result = compute_gt_annotations(anchors,
-                                            bboxes, 
+                                            bboxes,
                                             negative_overlap, 
                                             positive_overlap)
             positive_indices, ignore_indices, argmax_overlaps_inds = result
+            
+            # If any anchor overlaps with padding box
+            padding_indices = label[argmax_overlaps_inds] == -1
+            
+            positive_indices = positive_indices & ~padding_indices
+            ignore_indices = ignore_indices | padding_indices
 
             labels_batch[batch_idx, ignore_indices, -1] = -1 # Ignore
             labels_batch[batch_idx, positive_indices, -1] = 1 # Foreground
@@ -240,6 +248,7 @@ def compute_gt_annotations(anchors: np.ndarray,
 
     # assign "dont care" labels
     positive_indices = max_overlaps >= positive_overlap
+
     ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
 
     return positive_indices, ignore_indices, argmax_overlaps_inds

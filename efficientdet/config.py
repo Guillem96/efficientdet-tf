@@ -20,7 +20,7 @@ class EfficientDetCompudScaling(object):
     def __init__(self, 
                  config : EfficientDetBaseConfig = EfficientDetBaseConfig(), 
                  D : int = 0):
-        assert 0 >= D < len(PHIs), 'D must be between [0, 7]'
+        assert D in PHIs, 'D must be between [0, 7]'
         self.D = D
         self.base_conf = config
     

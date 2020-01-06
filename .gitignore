@@ -15,6 +15,9 @@ venv/
 # Datasets
 /data/
 
+# Serialized models
+/models/
+
 # Compute overlap
 compute_overlap.c
 *.so

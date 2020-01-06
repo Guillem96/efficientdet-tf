@@ -25,7 +25,7 @@ class AnchorsTest(unittest.TestCase):
             aspect_ratios=anchors_config.ratios,
             stride=anchors_config.strides[level - 3])
         
-        boxes = anchors_gen.tile_anchors_over_feature_map(im_random)
+        boxes = anchors_gen.tile_anchors_over_feature_map(im_random.shape)
 
         for box in boxes.numpy():
             box = box.astype('int32')
@@ -47,7 +47,7 @@ class AnchorsTest(unittest.TestCase):
             stride=anchors_config.strides[level - 3])
         
         for im, (l, bbs) in ds.take(1):
-            anchors = anchors_gen.tile_anchors_over_feature_map(im[0])
+            anchors = anchors_gen.tile_anchors_over_feature_map(im[0].shape)
             
             gt_reg, gt_labels = \
                 utils.anchors.anchor_targets_bbox(anchors.numpy(), 
@@ -90,7 +90,7 @@ class AnchorsTest(unittest.TestCase):
             stride=anchors_config.strides[level - 3])
         
         for im, (l, bbs) in ds.take(1):
-            anchors = anchors_gen.tile_anchors_over_feature_map(im[0])
+            anchors = anchors_gen.tile_anchors_over_feature_map(im[0].shape)
             
             gt_reg, gt_labels = \
                 utils.anchors.anchor_targets_bbox(anchors.numpy(), 
