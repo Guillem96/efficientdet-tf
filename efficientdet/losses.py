@@ -4,6 +4,7 @@ import tensorflow as tf
 def focal_loss(y_true: tf.Tensor,
                y_pred: tf.Tensor,
                gamma: int = 2,
+               alpha: float = 0.75,
                from_logits: bool = False,
                reduction: str = 'sum'):
 
@@ -28,7 +29,10 @@ def focal_loss(y_true: tf.Tensor,
     pt = y_pred * y_true + (1 - y_pred) * (1 - y_true)
     pt = tf.reshape(pt, [-1])
 
-    weight = (1 - pt) ** gamma
+    alpha = alpha + (1 - alpha) * (1 - y_true)
+    alpha = tf.reshape(alpha, [-1])
+    
+    weight = alpha * (1 - pt) ** gamma
     loss = tf.multiply(weight, bce)
 
     if reduction == 'mean':

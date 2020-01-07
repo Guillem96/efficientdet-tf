@@ -15,18 +15,30 @@ anchors_config = config.AnchorsConfig()
 
 class AnchorsTest(unittest.TestCase):
     
+    def generate_anchors(self,
+                         anchors_config: config.AnchorsConfig,
+                         im_shape: int) -> tf.Tensor:
+
+        anchors_gen = [utils.anchors.AnchorGenerator(
+                size=anchors_config.sizes[i - 3],
+                aspect_ratios=anchors_config.ratios,
+                stride=anchors_config.strides[i - 3]) 
+                for i in range(3, 8)]
+        
+        shapes = [im_shape // (2 ** (x - 2)) for x in range(3, 8)]
+
+        anchors = [g((size, size, 3))
+                for g, size in zip(anchors_gen, shapes)]
+
+        return tf.concat(anchors, axis=0)
+
     def test_tile_anchors(self):
         level = 3
-        feature_size = _get_res_at_level_i(512, level)
-        im_random = np.zeros((feature_size, feature_size, 3))
+        feature_size = 512
+        im_random = np.zeros((512, 512, 3))
 
-        anchors_gen = utils.anchors.AnchorGenerator(
-            size=anchors_config.sizes[level - 3],
-            aspect_ratios=anchors_config.ratios,
-            stride=anchors_config.strides[level - 3])
-        
-        boxes = anchors_gen.tile_anchors_over_feature_map(im_random.shape)
-
+        boxes = self.generate_anchors(config.AnchorsConfig(), 
+                                      im_random.shape[0])
         for box in boxes.numpy():
             box = box.astype('int32')
             cv2.rectangle(im_random, 
@@ -39,16 +51,13 @@ class AnchorsTest(unittest.TestCase):
     def test_compute_gt(self):
         level = 3
         ds = voc.build_dataset('test/data/VOC2007',
-                               im_input_size=(256, 256))
+                               im_input_size=(512, 512))
 
-        anchors_gen = utils.anchors.AnchorGenerator(
-            size=anchors_config.sizes[level - 3],
-            aspect_ratios=anchors_config.ratios,
-            stride=anchors_config.strides[level - 3])
+        anchors = self.generate_anchors(config.AnchorsConfig(), 
+                                        512)
         
         for im, (l, bbs) in ds.take(1):
-            anchors = anchors_gen.tile_anchors_over_feature_map(im[0].shape)
-            
+
             gt_reg, gt_labels = \
                 utils.anchors.anchor_targets_bbox(anchors.numpy(), 
                                                   im.numpy(), 
@@ -80,24 +89,22 @@ class AnchorsTest(unittest.TestCase):
                   np.any(gt_labels[:, :, -1] == 1.))
 
     def test_regress_boxes(self):
+        print('Regress anchors test')
+
         level = 3
         ds = voc.build_dataset('test/data/VOC2007',
-                               im_input_size=(256, 256))
+                               im_input_size=(512, 512))
 
-        anchors_gen = utils.anchors.AnchorGenerator(
-            size=anchors_config.sizes[level - 3],
-            aspect_ratios=anchors_config.ratios,
-            stride=anchors_config.strides[level - 3])
+        anchors = self.generate_anchors(config.AnchorsConfig(), 
+                                        512)
         
         for im, (l, bbs) in ds.take(1):
-            anchors = anchors_gen.tile_anchors_over_feature_map(im[0].shape)
             
             gt_reg, gt_labels = \
                 utils.anchors.anchor_targets_bbox(anchors.numpy(), 
                                                   im.numpy(), 
                                                   bbs.numpy(), l.numpy(), 
                                                   len(voc.IDX_2_LABEL))
-            
             near_mask = gt_reg[0, :, -1] == 1
             nearest_regressors = tf.expand_dims(gt_reg[0, near_mask][:, :-1], 0)
             nearest_anchors = tf.expand_dims(anchors[near_mask], 0)
