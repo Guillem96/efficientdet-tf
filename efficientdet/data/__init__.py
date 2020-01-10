@@ -1,1 +1,1 @@
-from . import voc
+from . import voc, labelme

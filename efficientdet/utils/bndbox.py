@@ -122,10 +122,10 @@ def clip_boxes(boxes: tf.Tensor,
     # TODO: Document this
     h, w = im_size
 
-    x1 = tf.clip_by_value(boxes[:, :, 0], 0, w)
-    y1 = tf.clip_by_value(boxes[:, :, 1], 0, h)
-    x2 = tf.clip_by_value(boxes[:, :, 2], 0, w)
-    y2 = tf.clip_by_value(boxes[:, :, 3], 0, h)
+    x1 = tf.clip_by_value(boxes[:, :, 0], 0, w - 1)
+    y1 = tf.clip_by_value(boxes[:, :, 1], 0, h - 1)
+    x2 = tf.clip_by_value(boxes[:, :, 2], 0, w - 1)
+    y2 = tf.clip_by_value(boxes[:, :, 3], 0, h - 1)
 
     return tf.stack([x1, y1, x2, y2], axis=2)
 

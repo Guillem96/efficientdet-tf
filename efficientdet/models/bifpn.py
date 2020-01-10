@@ -9,14 +9,14 @@ class Resize(tf.keras.Model):
         super(Resize, self).__init__()
         conv_cls = (tf.keras.layers.SeparableConv2D 
                     if separable else tf.keras.layers.Conv2D)
-        self.antialiasing_conv = conv_cls(features, 
-                                          kernel_size=3, 
-                                          padding='same')
+        # self.antialiasing_conv = conv_cls(features, 
+        #                                   kernel_size=3, 
+        #                                   padding='same')
 
     def call(self, images, target_dim=None):
         dims = target_dim[1: 3]
         x = tf.image.resize(images, dims) # Bilinear as default
-        x = self.antialiasing_conv(x)
+        # x = self.antialiasing_conv(x)
         return x 
 
 class FastFusion(tf.keras.Model):
@@ -65,10 +65,6 @@ class BiFPNBlock(tf.keras.Model):
     def __init__(self, features):
         super(BiFPNBlock, self).__init__()
 
-        # One pixel-wise for each feature comming from the 
-        # bottom-up path
-        self.pixel_wise = [tf.keras.layers.Conv2D(features, kernel_size=1)
-                            for _ in range(5)] 
         # Feature fusion for intermediate level
         # ff stands for Feature fusion
         # td refers to intermediate level
@@ -83,20 +79,17 @@ class BiFPNBlock(tf.keras.Model):
         self.ff_4_out = FastFusion(3, features)
         self.ff_3_out = FastFusion(2, features)
 
-    def call(self, inputs):
+    def call(self, features):
         """
         Computes the feature fusion of bottom-up features comming
         from the Backbone NN
 
         Parameters
         ----------
-        inputs: List[tf.Tensor]
+        features: List[tf.Tensor]
             Feature maps of each convolutional stage of the
             backbone neural network
         """
-        # Each Pin has shape (BATCH, HEIGHT, WIDTH, CHANNELS)
-        # We first reduce the channels using a pixel-wise conv
-        features = [self.pixel_wise[i](inputs[i]) for i in range(len(inputs))]
         P3, P4, P5, P6, P7 = features
 
         # Compute the intermediate state
@@ -122,11 +115,20 @@ class BiFPN(tf.keras.Model):
                  n_blocks=3):
         super(BiFPN, self).__init__()
 
+                # One pixel-wise for each feature comming from the 
+        # bottom-up path
+        self.pixel_wise = [tf.keras.layers.Conv2D(features, kernel_size=1)
+                            for _ in range(5)] 
+                            
         self.blocks = [BiFPNBlock(features)
                        for i in range(n_blocks)]
     
     def call(self, inputs):
-        x = inputs
+        
+        # Each Pin has shape (BATCH, H, W, C)
+        # We first reduce the channels using a pixel-wise conv
+        features = [self.pixel_wise[i](inputs[i]) for i in range(len(inputs))]
+
         for block in self.blocks:
-            x = block(x)
-        return x
+            features = block(features)
+        return features

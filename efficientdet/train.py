@@ -9,6 +9,9 @@ import efficientdet
 import efficientdet.utils as utils
 import efficientdet.engine as engine
 
+huber_loss_fn = tf.losses.Huber(
+    reduction=tf.losses.Reduction.SUM)
+
 
 def loss_fn(y_true_clf: tf.Tensor, 
             y_pred_clf: tf.Tensor, 
@@ -17,28 +20,24 @@ def loss_fn(y_true_clf: tf.Tensor,
 
     batch, n_anchors, n_classes = y_true_clf.shape
 
-    y_true_clf = tf.reshape(y_true_clf, [-1, n_classes])
-    y_pred_clf = tf.reshape(y_pred_clf, [-1, n_classes - 1])
+    anchors_states = y_true_clf[:, :, -1]
+    not_ignore_idx = tf.where(anchors_states != -1)
+    true_idx = tf.where(anchors_states == 1)
+    normalizer = true_idx.shape[0]
     
-    y_true_reg = tf.reshape(y_true_reg, [-1, 5])
-    y_pred_reg = tf.reshape(y_pred_reg, [-1, 4])
+    y_true_clf = tf.gather_nd(y_true_clf[:, :, :-1], not_ignore_idx)
+    y_pred_clf = tf.gather_nd(y_pred_clf, not_ignore_idx)
     
-    regress_mask = y_true_clf[:, -1] == 1
-    clf_mask = y_true_clf[:, -1] != -1
+    y_true_reg = tf.gather_nd(y_true_reg[:, :, :-1], true_idx)
+    y_pred_reg = tf.gather_nd(y_pred_reg, true_idx)
+    
+    reg_loss = huber_loss_fn(y_true_reg, y_pred_reg)
 
-    reg_loss = efficientdet.losses.huber_loss(y_true_reg[:, :-1], 
-                                              y_pred_reg,
-                                              reduction='none')
-    # No regress non-overlapping boxes
-    reg_loss = tf.boolean_mask(reg_loss, regress_mask)
-    reg_loss = tf.reduce_mean(reg_loss)
+    clf_loss = efficientdet.losses.focal_loss(y_true_clf, 
+                                              y_pred_clf,
+                                              reduction='sum')
 
-    clf_loss = efficientdet.losses.focal_loss(
-        tf.boolean_mask(y_true_clf[:, :-1], clf_mask), 
-        tf.boolean_mask(y_pred_clf, clf_mask),
-        reduction='mean')
-    
-    return reg_loss, clf_loss
+    return reg_loss / normalizer, clf_loss / normalizer
 
 
 def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
@@ -77,13 +76,27 @@ def train(**kwargs):
             kwargs['train_dataset'],
             batch_size=kwargs['batch_size'],
             im_input_size=(model.config.input_size,) * 2)
+            
+    elif kwargs['format'] == 'labelme':
+        assert kwargs['classes_names'] != '', 'You must specify class names'
+        assert kwargs['images_path'] != '', 'Images base path missing'
+
+        class2idx = {c: i 
+            for i, c in enumerate(kwargs['classes_names'].split(','))}
+
+        ds = efficientdet.data.labelme.build_dataset(
+            kwargs['train_dataset'],
+            kwargs['images_path'],
+            batch_size=kwargs['batch_size'],
+            class2idx=class2idx,
+            im_input_size=(model.config.input_size,) * 2)
 
     anchors = generate_anchors(model.anchors_config, 
                                model.config.input_size)
     
     optimizer = tf.optimizers.Adam(
         learning_rate=kwargs['learning_rate'],
-        clipvalue=1.0)
+        clipnorm=0.001)
 
     for epoch in range(kwargs['epochs']):
 
@@ -120,13 +133,22 @@ def train(**kwargs):
                    'in case backbone is not frozen')
 
 # Data parameters
-@click.option('--format', type=click.Choice(['VOC']),
+@click.option('--format', type=click.Choice(['VOC', 'labelme']),
               default='VOC', help='Dataset to use for training')
 @click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
+@click.option('--images-path', type=click.Path(file_okay=False, exists=True),
+              required=True, default='',
+              help='Base path to images. '
+                   'Required when using labelme format')
 @click.option('--n-classes', type=int, required=True,
               help='Number of important classes without '
                    'taking background into account')
+@click.option('--classes-names', 
+              default='', type=str, 
+              help='Only required when format is labelme. '
+                   'Name of classes separated using comma. '
+                   'class1,class2,class3')
 
 # Checkpointing parameters
 @click.option('--checkpoint', help='Path to model checkpoint',

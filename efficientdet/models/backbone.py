@@ -33,7 +33,7 @@ def build_efficient_net_backbone(B: int = 0, weights: str = 'imagenet'):
         if hasattr(nl, 'strides') and nl.strides[0] == 2:
             features.append(l)
     
-    features.append(nl)
+    features.append(l)
 
     return tf.keras.Model(base_model.input, 
                           outputs=[f.output for f in features[-5:]])

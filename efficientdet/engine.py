@@ -4,6 +4,7 @@ import tensorflow as tf
 
 import efficientdet.utils as utils
 
+import cv2
 
 LossFn = Callable[[tf.Tensor] * 4, Tuple[tf.Tensor, tf.Tensor]]
 
@@ -15,15 +16,15 @@ def _train_step(model: tf.keras.Model,
                 regress_targets: tf.Tensor, 
                 labels: tf.Tensor) -> Tuple[float, float]:
     
-    with tf.GradientTape() as tape:
-        regressors, clf_probas = model(images)
+    # with tf.GradientTape() as tape:
+    regressors, clf_probas = model(images)
 
-        reg_loss, clf_loss = loss_fn(labels, clf_probas, 
-                                     regress_targets, regressors)
-        loss = (reg_loss + clf_loss) * 0.5
+    reg_loss, clf_loss = loss_fn(labels, clf_probas, 
+                                regress_targets, regressors)
+    loss = (reg_loss + clf_loss) * 0.5
 
-    grads = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    # grads = tape.gradient(loss, model.trainable_variables)
+    # optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
     return reg_loss, clf_loss
 
@@ -43,7 +44,6 @@ def train_single_epoch(model: tf.keras.Model,
 
     for i, (images, (labels, bbs)) in enumerate(dataset):
         
-        # TODO: Handle padding
         target_reg, target_clf = \
             utils.anchors.anchor_targets_bbox(anchors.numpy(), 
                                               images.numpy(), 
@@ -64,6 +64,6 @@ def train_single_epoch(model: tf.keras.Model,
 
         if (i + 1) % print_every == 0:
             print(f'Epoch[{epoch}] '
-                  f'loss: {running_loss.result():.4f} '
-                  f'clf. loss: {running_clf_loss.result():.4f} '
-                  f'reg. loss: {running_reg_loss.result():.4f} ')
+                  f'loss: {running_loss.result():.6f} '
+                  f'clf. loss: {running_clf_loss.result():.6f} '
+                  f'reg. loss: {running_reg_loss.result():.6f} ')

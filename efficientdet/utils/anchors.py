@@ -71,7 +71,7 @@ class AnchorGenerator(object):
         shift_x = tf.reshape(shift_x, [-1])
         shift_y = tf.reshape(shift_y, [-1])
 
-        shifts = tf.stack([shift_x, shift_y] * 2, axis=0)
+        shifts = tf.stack([shift_x, shift_y, shift_x, shift_y], axis=0)
         shifts = tf.transpose(shifts)
 
         # add A anchors (1, A, 4) to

@@ -37,7 +37,7 @@ class EfficientDet(tf.keras.Model):
         self.backbone = (models
                          .build_efficient_net_backbone(self.config.B, 
                                                        weights))
-        self.backbone.trainable = freeze_backbone
+        self.backbone.trainable = not freeze_backbone
 
         self.bifpn = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
 
