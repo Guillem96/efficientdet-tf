@@ -178,7 +178,7 @@ def anchor_targets_bbox(anchors: np.ndarray,
             positive_indices, ignore_indices, argmax_overlaps_inds = result
             
             # If any anchor overlaps with padding box
-            padding_indices = label[argmax_overlaps_inds] == -1
+            padding_indices = label[argmax_overlaps_inds] == padding_value
             
             positive_indices = positive_indices & ~padding_indices
             ignore_indices = ignore_indices | padding_indices
@@ -245,11 +245,18 @@ def compute_gt_annotations(anchors: np.ndarray,
                                    annotations.astype(np.float64))
     argmax_overlaps_inds = np.argmax(overlaps, axis=1)
     max_overlaps = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
+    max_overlap_boxes = annotations[argmax_overlaps_inds]
+
+    # Compute areas of boxes so we can ignore 'ridiculous' sized boxes
+    widths = (max_overlap_boxes[:, 2] - max_overlap_boxes[:, 0])
+    heights = (max_overlap_boxes[:, 3] - max_overlap_boxes[:, 1])
+    areas = widths * heights
+    small_areas = areas < 1.
 
     # assign "dont care" labels
-    positive_indices = max_overlaps >= positive_overlap
-
+    positive_indices = (max_overlaps >= positive_overlap) & ~small_areas
     ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
+    ignore_indices = ignore_indices | small_areas
 
     return positive_indices, ignore_indices, argmax_overlaps_inds
 

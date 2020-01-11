@@ -13,6 +13,6 @@ class Resize(tf.keras.Model):
 
     def call(self, images, target_dim=None):
         dims = target_dim[1: 3]
-        x = tf.image.resize(images, dims) # Bilinear as default
+        x = tf.image.resize(images, dims, method='nearest')        
         x = self.antialiasing_conv(x)
         return x 

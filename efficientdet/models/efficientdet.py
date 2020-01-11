@@ -68,10 +68,10 @@ class EfficientDet(tf.keras.Model):
             Wether if model is training or it is in inference mode
 
         """
-        features = self.backbone(images)
+        features = self.backbone(images, training=training)
         
         # List of [BATCH, H, W, C]
-        bifnp_features = self.neck(features)
+        bifnp_features = self.neck(features, training=training)
 
         # List of [BATCH, A * 4]
         bboxes = [self.bb_head(bf) for bf in bifnp_features]

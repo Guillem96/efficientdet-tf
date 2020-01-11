@@ -14,6 +14,21 @@ import tensorflow as tf
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
+from .preprocess import normalize_image
+
+
+def _load_bbox_from_rectangle(points: Sequence[float]) -> Sequence[float]:
+    return sum(points, [])
+
+
+def _load_bbox_from_polygon(points: Sequence[float]) -> Sequence[float]:
+    xs, ys = zip(*points)
+    xmin = min(xs)
+    xmax = max(xs)
+    ymin = min(ys)
+    ymax = max(ys)
+    return [xmin, ymin, xmax, ymax]
+
 
 def _load_labelme_instance(
         images_base_path: Union[str, Path],
@@ -32,10 +47,20 @@ def _load_labelme_instance(
 
     image_path = Path(images_base_path) / annot['imagePath']
     image = io_utils.load_image(str(image_path), im_input_size)
+    image = normalize_image(image)
+    
     w, h = annot['imageWidth'], annot['imageHeight']
 
     for shape in annot['shapes']:
-        points = sum(shape['points'], [])
+        shape_type = shape['shape_type']
+        if shape_type == 'rectangle':
+            points = _load_bbox_from_rectangle(shape['points'])
+        elif shape_type == 'polygon':
+            points = _load_bbox_from_polygon(shape['points'])
+        else:
+            raise ValueError(
+                f'Unexpected shape type {shape_type} in file {annot_path}')
+                
         label = shape['label']
         bbs.append(points)
         labels.append(class2idx[label])

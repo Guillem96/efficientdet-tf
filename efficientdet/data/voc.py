@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
+from .preprocess import normalize_image
 
 
 IDX_2_LABEL = [
@@ -143,7 +144,7 @@ def build_dataset(dataset_path: Union[str, Path],
     # We assume that tf datasets list files sorted when shuffle=False
     im_ds = (tf.data.Dataset.list_files(str(im_path / '*.jpg'), 
                                         shuffle=False)
-             .map(load_im))
+             .map(load_im).map(normalize_image))
     annot_ds = (tf.data.Dataset
                 .from_generator(generator=lambda: _annot_gen(annot_files), 
                                 output_types=(tf.int32, tf.float32))

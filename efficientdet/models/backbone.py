@@ -2,7 +2,8 @@ import tensorflow as tf
 import efficientnet.tfkeras as efficientnet
 
 
-def build_efficient_net_backbone(B: int = 0, weights: str = 'imagenet'):
+def build_efficient_net_backbone(B: int = 0, 
+                                 weights: str = 'imagenet') -> tf.keras.Model:
     """
     Creates Efficient Net backbone returning features at
     each level

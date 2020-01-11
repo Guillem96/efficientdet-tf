@@ -41,7 +41,6 @@ def loss_fn(y_true_clf: tf.Tensor,
 
 
 def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
-                     bidirectional: bool,
                      im_shape: int) -> tf.Tensor:
 
     anchors_gen = [utils.anchors.AnchorGenerator(
@@ -49,9 +48,8 @@ def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
             aspect_ratios=anchors_config.ratios,
             stride=anchors_config.strides[i - 3]) 
             for i in range(3, 8)]
-    sub_factor = 2 * int(bidirectional)
-    shapes = [im_shape // (2 ** (x - sub_factor)) 
-              for x in range(3, 8)]
+
+    shapes = [im_shape // (2 ** x) for x in range(3, 8)]
 
     anchors = [g((size, size, 3))
                for g, size in zip(anchors_gen, shapes)]
@@ -95,7 +93,6 @@ def train(**kwargs):
             im_input_size=(model.config.input_size,) * 2)
 
     anchors = generate_anchors(model.anchors_config,
-                               kwargs['bidirectional'], 
                                model.config.input_size)
     
     optimizer = tf.optimizers.Adam(
@@ -134,7 +131,7 @@ def train(**kwargs):
               default=False, help='Wether or not freeze EfficientNet backbone')
 
 # Training parameters
-@click.option('--epochs', type=int, default=20,
+@click.option('--epochs', type=int, default=100,
               help='Number of epochs to train the model')
 @click.option('--batch-size', type=int, default=16,
               help='Dataset batch size')
@@ -144,7 +141,7 @@ def train(**kwargs):
 
 # Data parameters
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
-              default='VOC', help='Dataset to use for training')
+              required=True, help='Dataset to use for training')
 @click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
 @click.option('--images-path', type=click.Path(file_okay=False, exists=True),

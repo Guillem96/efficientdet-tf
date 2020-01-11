@@ -13,7 +13,7 @@ class EfficientDetBaseConfig(typing.NamedTuple):
     Wbifpn: int = 64
     Dbifpn: int = 2
     # Box predictor head scaling
-    Dclass: int = 2
+    Dclass: int = 3
 
 
 class EfficientDetCompudScaling(object):
@@ -38,7 +38,7 @@ class EfficientDetCompudScaling(object):
     
     @property
     def Dclass(self) -> int:
-        return self.base_conf.Dclass + int(PHIs[self.D] / 2)
+        return self.base_conf.Dclass + int(PHIs[self.D] / 3)
     
     @property
     def B(self) -> int:

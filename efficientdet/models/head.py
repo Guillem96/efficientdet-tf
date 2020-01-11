@@ -44,11 +44,14 @@ class RetinaNetClassifier(tf.keras.Model):
                                    activation='relu',
                                    padding='same')
             for _ in range(depth)]
-
+        
+        prob = 0.01
+        w_init = tf.keras.initializers.constant(-tf.math.log((1 - prob) / prob)
         self.cls_score = tf.keras.layers.Conv2D(num_anchors * num_classes,
                                                 kernel_size=3,
                                                 activation='sigmoid',
-                                                padding='same')
+                                                padding='same',
+                                                bias_initializer=w_init)
 
     def call(self, features):
         x = features

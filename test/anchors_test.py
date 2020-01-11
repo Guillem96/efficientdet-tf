@@ -25,10 +25,10 @@ class AnchorsTest(unittest.TestCase):
                 stride=anchors_config.strides[i - 3]) 
                 for i in range(3, 8)]
         
-        shapes = [im_shape // (2 ** (x - 2)) for x in range(3, 8)]
+        shapes = [im_shape // (2 ** x) for x in range(3, 8)]
 
         anchors = [g((size, size, 3))
-                for g, size in zip(anchors_gen, shapes)]
+                   for g, size in zip(anchors_gen, shapes)]
 
         return tf.concat(anchors, axis=0)
 
