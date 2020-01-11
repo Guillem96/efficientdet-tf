@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import math
 
 class RetinaNetBBPredictor(tf.keras.Model):
 
@@ -46,7 +46,7 @@ class RetinaNetClassifier(tf.keras.Model):
             for _ in range(depth)]
         
         prob = 0.01
-        w_init = tf.keras.initializers.constant(-tf.math.log((1 - prob) / prob))
+        w_init = tf.constant_initializer(-math.log((1 - prob) / prob))
         self.cls_score = tf.keras.layers.Conv2D(num_anchors * num_classes,
                                                 kernel_size=3,
                                                 activation='sigmoid',

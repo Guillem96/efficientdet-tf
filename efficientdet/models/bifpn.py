@@ -8,7 +8,7 @@ EPSILON = 1e-5
 class FastFusion(tf.keras.layers.Layer):
     def __init__(self, size: int, features: int):
         super(FastFusion, self).__init__()
-        w_init = tf.keras.initializers.constant(1 / size)
+        w_init = tf.constant_initializer(1 / size)
 
         self.size = size
         self.w = tf.Variable(name='w', 
