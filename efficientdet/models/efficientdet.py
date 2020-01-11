@@ -26,6 +26,7 @@ class EfficientDet(tf.keras.Model):
     def __init__(self, 
                  num_classes: int,
                  D : int = 0, 
+                 bidirectional: bool = True,
                  freeze_backbone: bool = False,
                  weights : str = 'imagenet'):
                  
@@ -39,7 +40,10 @@ class EfficientDet(tf.keras.Model):
                                                        weights))
         self.backbone.trainable = not freeze_backbone
 
-        self.bifpn = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
+        if bidirectional:
+            self.neck = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
+        else:
+            self.neck = models.FPN(self.config.Wbifpn)
 
         self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
                                                      self.config.Dclass,
@@ -67,7 +71,7 @@ class EfficientDet(tf.keras.Model):
         features = self.backbone(images)
         
         # List of [BATCH, H, W, C]
-        bifnp_features = self.bifpn(features)
+        bifnp_features = self.neck(features)
 
         # List of [BATCH, A * 4]
         bboxes = [self.bb_head(bf) for bf in bifnp_features]

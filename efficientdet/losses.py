@@ -20,8 +20,9 @@ def focal_loss(y_true: tf.Tensor,
     
     pt = tf.where(y_true == 1, y_pred, 1 - y_pred)
     
-    loss = -alpha * tf.pow(1 - pt, gamma) * tf.math.log(pt)
-
+    loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
+    loss = tf.reduce_sum(loss, axis=-1)
+    
     if reduction == 'mean':
         return tf.reduce_mean(loss)
     elif reduction == 'sum':

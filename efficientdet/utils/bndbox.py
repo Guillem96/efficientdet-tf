@@ -154,6 +154,7 @@ def nms(boxes: tf.Tensor, class_scores: tf.Tensor) -> tf.Tensor:
     boxes = tf.cast(boxes, tf.float32)
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=-1)
     boxes = tf.stack([y1, x1, y2, x2], axis=-1)
+    boxes = tf.reshape(boxes, [boxes.shape[0], -1, 4])
 
     class_scores = tf.cast(class_scores, tf.float32)
     
@@ -178,6 +179,8 @@ def nms(boxes: tf.Tensor, class_scores: tf.Tensor) -> tf.Tensor:
             batch_boxes = tf.concat(batch_boxes, axis=0)
             y1, x1, y2, x2 = tf.split(batch_boxes, 4, axis=-1)
             batch_boxes = tf.stack([x1, y1, x2, y2], axis=-1)
+            batch_boxes = tf.reshape(batch_boxes, [-1, 4])
+
             all_boxes.append(batch_boxes)
             all_labels.append(tf.constant(batch_labels, dtype=tf.int32))
 

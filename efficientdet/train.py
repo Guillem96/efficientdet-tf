@@ -41,6 +41,7 @@ def loss_fn(y_true_clf: tf.Tensor,
 
 
 def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
+                     bidirectional: bool,
                      im_shape: int) -> tf.Tensor:
 
     anchors_gen = [utils.anchors.AnchorGenerator(
@@ -48,8 +49,9 @@ def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
             aspect_ratios=anchors_config.ratios,
             stride=anchors_config.strides[i - 3]) 
             for i in range(3, 8)]
-    
-    shapes = [im_shape // (2 ** (x - 2)) for x in range(3, 8)]
+    sub_factor = 2 * int(bidirectional)
+    shapes = [im_shape // (2 ** (x - sub_factor)) 
+              for x in range(3, 8)]
 
     anchors = [g((size, size, 3))
                for g, size in zip(anchors_gen, shapes)]
@@ -64,6 +66,7 @@ def train(**kwargs):
     model = efficientdet.models.EfficientDet(
         kwargs['n_classes'],
         D=kwargs['efficientdet'],
+        bidirectional=kwargs['bidirectional'],
         freeze_backbone=kwargs['freeze_backbone'],
         weights='imagenet')
     
@@ -91,7 +94,8 @@ def train(**kwargs):
             class2idx=class2idx,
             im_input_size=(model.config.input_size,) * 2)
 
-    anchors = generate_anchors(model.anchors_config, 
+    anchors = generate_anchors(model.anchors_config,
+                               kwargs['bidirectional'], 
                                model.config.input_size)
     
     optimizer = tf.optimizers.Adam(
@@ -110,7 +114,10 @@ def train(**kwargs):
             epoch=epoch)
 
         # TODO: Validate
-        fname = save_checkpoint_dir / f'efficientdet_weights_{epoch}.tf'
+        model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
+        data_format = kwargs['format']
+        fname = f'{model_type}_{data_format}_efficientdet_weights_{epoch}.tf'
+        fname = save_checkpoint_dir / fname
         model.save_weights(str(fname))
         
 
@@ -120,6 +127,9 @@ def train(**kwargs):
 @click.option('--efficientdet', type=int, default=0,
               help='EfficientDet architecture. '
                    '{0, 1, 2, 3, 4, 5, 6, 7}')
+@click.option('--bidirectional/--no-bidirectional', default=True,
+              help='If bidirectional is set to false the NN will behave as '
+                   'a "normal" retinanet, otherwise as EfficientDet')
 @click.option('--freeze-backbone/--no-freeze-backbone', 
               default=False, help='Wether or not freeze EfficientNet backbone')
 

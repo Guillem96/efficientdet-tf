@@ -13,7 +13,9 @@ import tensorflow as tf
 
 import xml.etree.ElementTree as ET
 
+import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
+
 
 IDX_2_LABEL = [
     'person',
@@ -70,15 +72,6 @@ def _read_voc_annot(annot_path: str) -> Tuple[Sequence[int],
     bbs = bb_utils.normalize_bndboxes(bbs, image_size)
 
     return labels, bbs
-
-
-def _load_image(im_path: str,
-                im_size: Tuple[int, int]) -> tf.Tensor:
-    # Reads the image and resizes it
-    im = tf.io.read_file(im_path)
-    im = tf.image.decode_jpeg(im, channels=3)
-    im = tf.image.convert_image_dtype(im, tf.float32)
-    return tf.image.resize(im, im_size)
 
 
 def _annot_gen(annot_file: Sequence[Path]):
@@ -144,7 +137,7 @@ def build_dataset(dataset_path: Union[str, Path],
     
     # Partially evaluate image loader to resize images
     # always with the same shape
-    load_im = partial(_load_image, im_size=im_input_size)
+    load_im = partial(io_utils.load_image, im_size=im_input_size)
     scale_boxes = partial(_scale_boxes, to_size=im_input_size)
 
     # We assume that tf datasets list files sorted when shuffle=False

@@ -80,6 +80,7 @@ def build_dataset(annotations_path: Union[str, Path],
                   images_path: Union[str, Path],
                   class2idx: Mapping[str, int],
                   im_input_size: Tuple[int, int],
+                  shuffle: bool = True,
                   batch_size: int = 2) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
@@ -94,6 +95,8 @@ def build_dataset(annotations_path: Union[str, Path],
     im_input_size: Tuple[int, int]
         Model input size. Images will automatically be resized to this
         shape
+    shuffle: bool, default True
+        Shuffle the dataset or not
     batch_size: int, default 2
         Training model batch size
     
