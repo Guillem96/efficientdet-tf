@@ -34,7 +34,7 @@ def build_efficient_net_backbone(B: int = 0,
         if hasattr(nl, 'strides') and nl.strides[0] == 2:
             features.append(l)
     
-    features.append(l)
+    features.append(nl)
 
     return tf.keras.Model(base_model.input, 
                           outputs=[f.output for f in features[-5:]])

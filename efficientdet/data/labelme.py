@@ -162,10 +162,12 @@ def build_dataset(annotations_path: Union[str, Path],
           .from_generator(generator=generator, 
                           output_types=(tf.float32, tf.int32, tf.float32))
           .map(scale_boxes)
-          .shuffle(128)
           .padded_batch(batch_size=batch_size,
                         padded_shapes=((*im_input_size, 3), 
                                        ((None,), (None, 4))),
                         padding_values=(0., (-1, 0.))))
     
+    if shuffle:
+        ds = ds.shuffle(128)
+        
     return ds

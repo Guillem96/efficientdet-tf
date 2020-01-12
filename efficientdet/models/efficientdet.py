@@ -104,6 +104,6 @@ class EfficientDet(tf.keras.Model):
 
             boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
             boxes = utils.bndbox.clip_boxes(boxes, images.shape[1:3])
-            boxes, labels = utils.bndbox.nms(boxes, class_scores)
+            boxes, labels, scores = utils.bndbox.nms(boxes, class_scores)
             # TODO: Pad output
-            return boxes, labels
+            return boxes, labels, scores

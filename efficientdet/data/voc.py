@@ -95,6 +95,7 @@ def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor,
 
 def build_dataset(dataset_path: Union[str, Path],
                   im_input_size: Tuple[int, int],
+                  shuffle: bool = True,
                   batch_size: int = 2) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
@@ -130,8 +131,8 @@ def build_dataset(dataset_path: Union[str, Path],
 
     """
     dataset_path = Path(dataset_path)
-    im_path = dataset_path / 'images'
-    annot_path = dataset_path / 'annots'
+    im_path = dataset_path / 'JPEGImages'
+    annot_path = dataset_path / 'Annotations'
 
     # List sorted annotation files
     annot_files = sorted(annot_path.glob('*.xml'))
@@ -152,11 +153,12 @@ def build_dataset(dataset_path: Union[str, Path],
 
     # Join both datasets
     ds = (tf.data.Dataset.zip((im_ds, annot_ds))
-          .shuffle(128)
           .padded_batch(batch_size=batch_size,
                         padded_shapes=((*im_input_size, 3), 
                                        ((None,), (None, 4))),
-                        padding_values=(0., (-1, 0.)))
-          .repeat())
+                        padding_values=(0., (-1, 0.))))
+    
+    if shuffle:
+        ds = ds.shuffle(128)
     
     return ds

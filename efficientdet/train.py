@@ -72,12 +72,21 @@ def train(**kwargs):
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
         model.load_weights(kwargs['checkpoint'])
 
+    val_ds = None
     if kwargs['format'] == 'VOC':
+        class2idx = efficientdet.data.voc.LABEL_2_IDX
         ds = efficientdet.data.voc.build_dataset(
             kwargs['train_dataset'],
             batch_size=kwargs['batch_size'],
             im_input_size=(model.config.input_size,) * 2)
-            
+        
+        if kwargs['val_dataset']:
+            val_ds = efficientdet.data.voc.build_dataset(
+                kwargs['train_dataset'],
+                shuffle=False,
+                batch_size=kwargs['batch_size'] // 2,
+                im_input_size=(model.config.input_size,) * 2)
+
     elif kwargs['format'] == 'labelme':
         assert kwargs['classes_names'] != '', 'You must specify class names'
         assert kwargs['images_path'] != '', 'Images base path missing'
@@ -91,6 +100,15 @@ def train(**kwargs):
             batch_size=kwargs['batch_size'],
             class2idx=class2idx,
             im_input_size=(model.config.input_size,) * 2)
+        
+        if kwargs['val_dataset']:
+            val_ds = efficientdet.data.labelme.build_dataset(
+                kwargs['train_dataset'],
+                kwargs['images_path'],
+                batch_size=kwargs['batch_size'] // 2,
+                shuffle=False,
+                class2idx=class2idx,
+                im_input_size=(model.config.input_size,) * 2)
 
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
@@ -110,13 +128,20 @@ def train(**kwargs):
             num_classes=kwargs['n_classes'],
             epoch=epoch)
 
-        # TODO: Validate
+        if val_ds is not None:
+            engine.evaluate(
+                model=model,
+                dataset=val_ds,
+                class2idx=class2idx,
+                epoch=epoch
+            )
+
+        return
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
         data_format = kwargs['format']
         fname = f'{model_type}_{data_format}_efficientdet_weights_{epoch}.tf'
         fname = save_checkpoint_dir / fname
         model.save_weights(str(fname))
-        
 
 @click.command()
 
@@ -144,6 +169,10 @@ def train(**kwargs):
               required=True, help='Dataset to use for training')
 @click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
+@click.option('--val-dataset', default='', 
+              type=click.Path(file_okay=False, exists=True),
+              help='Path to validation annotations. If it is '
+                   ' not set by the user, validation won\'t be performed')
 @click.option('--images-path', type=click.Path(file_okay=False, exists=True),
               required=True, default='',
               help='Base path to images. '
