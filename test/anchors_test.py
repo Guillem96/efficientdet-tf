@@ -39,7 +39,7 @@ class AnchorsTest(unittest.TestCase):
 
         boxes = self.generate_anchors(config.AnchorsConfig(), 
                                       im_random.shape[0])
-        print('anch:',boxes.shape)
+
         for box in boxes.numpy():
             box = box.astype('int32')
             cv2.rectangle(im_random, 

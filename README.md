@@ -23,8 +23,15 @@ You can specify the data model on the training command.
 ```
 $ git clone https://github.com/Guillem96/efficientdet-tf.git
 ```
+2. Install COCO API for Python
 
-2. Navigate inside the project and run the following commands
+```
+$ git clone https://github.com/cocodataset/cocoapi.git && cd cocoapi/PythonAPI
+$ make install
+$ cd ../.. && rm -rf cocoapi # Optional 
+```
+
+3. Navigate inside the project and run the following commands
 
 ```
 $ cd efficientdet-tf
@@ -81,7 +88,7 @@ $ python -m efficientdet.train \
     --train-dataset test/data/pokemon \
     --images-path test/data/pokemon \
     --format labelme \
-    --classes treecko,greninja,mewtwo,solgaleo,psyduck \
+    --classes-names treecko,greninja,mewtwo,solgaleo,psyduck \
     --n-classes 5 \
     
     --epochs 200 \
@@ -126,10 +133,11 @@ effdet.load_weights('...')
 
 images  = tf.random.uniform((3, 512, 512, 3)) # 3 Mock images
 
-boxes, labels = effdet(images, training=False)
+boxes, labels, scores = effdet(images, training=False)
 
 # labels -> List of tf.Tensor of shape [N,]
 # boxes -> List of tf.Tensor of shape [N, 4]
+# scores -> Confidence of each box
 for im_boxes, im_labels in zip(boxes, labels):
     # Process boxes of a specific image
     ...
@@ -137,6 +145,7 @@ for im_boxes, im_labels in zip(boxes, labels):
 
 ## Roadmap
 
+- [ ] Visualziation utils
 - [ ] Learning rate schedulers to speed up and enhance training
 - [ ] Proper evaluation using COCO mAP
 - [ ] Define a custom data-format to train with custom datasets
