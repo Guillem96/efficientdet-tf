@@ -112,7 +112,7 @@ $ python -m efficientdet.train \
     --save-dir models/pokemon-models/
 ```
 
-## Using a trained model using code
+## Using a trained model
 
 ```python
 import tensorflow as tf
