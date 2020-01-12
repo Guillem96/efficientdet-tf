@@ -8,7 +8,7 @@ EPSILON = 1e-5
 class FastFusion(tf.keras.layers.Layer):
     def __init__(self, size: int, features: int):
         super(FastFusion, self).__init__()
-        w_init = tf.constant_initializer(1 / size)
+        w_init = tf.keras.initializers.constant(1 / size)
 
         self.size = size
         self.w = tf.Variable(name='w', 
@@ -132,11 +132,11 @@ class BiFPN(tf.keras.Model):
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv
         _, _, *C = inputs
-        P3, P4, P5 = [self.pixel_wise[i](inputs[i]) for i in range(len(C))]
+        P3, P4, P5 = [self.pixel_wise[i](C[i]) for i in range(len(C))]
         P6 = self.gen_P6(C[-1])
         P7 = self.gen_P7(self.relu(P6))
 
-        features = P3, P4, P5, P6, P7
+        features = P3, P4, P5, P6, P7   
         for block in self.blocks:
             features = block(features, training=training)
 
