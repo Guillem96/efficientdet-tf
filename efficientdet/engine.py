@@ -16,15 +16,15 @@ def _train_step(model: tf.keras.Model,
                 regress_targets: tf.Tensor, 
                 labels: tf.Tensor) -> Tuple[float, float]:
     
-    # with tf.GradientTape() as tape:
-    regressors, clf_probas = model(images)
+    with tf.GradientTape() as tape:
+        regressors, clf_probas = model(images)
 
-    reg_loss, clf_loss = loss_fn(labels, clf_probas, 
-                                regress_targets, regressors)
-    loss = (reg_loss + clf_loss) * 0.5
+        reg_loss, clf_loss = loss_fn(labels, clf_probas, 
+                                    regress_targets, regressors)
+        loss = (reg_loss + clf_loss) * 0.5
 
-    # grads = tape.gradient(loss, model.trainable_variables)
-    # optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    grads = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
     return reg_loss, clf_loss
 
