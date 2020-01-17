@@ -42,7 +42,7 @@ class EfficientDetCompudScaling(object):
     
     @property
     def B(self) -> int:
-        return self.base_conf.backbone
+        return self.D
     
 
 class AnchorsConfig(typing.NamedTuple):
