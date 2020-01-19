@@ -63,6 +63,9 @@ Options:
                                   to reduce it in case backbone is not frozen
   --format [VOC|labelme]          Dataset to use for training  [required]
   --train-dataset DIRECTORY       Path to annotations and images  [required]
+  --val-dataset DIRECTORY         Path to validation annotations. If it is
+                                  not set by the user, validation won't be
+                                  performed
   --images-path DIRECTORY         Base path to images. Required when using
                                   labelme format  [required]
   --n-classes INTEGER             Number of important classes without taking
@@ -72,7 +75,7 @@ Options:
                                   class1,class2,class3
   --checkpoint PATH               Path to model checkpoint
   --save-dir DIRECTORY            Directory to save model weights  [required]
-  --help                          Show this message and exit.
+  --help                          Show this message and exit.                  Show this message and exit.
 ```
 
 ## Train the model with labelme format
@@ -119,6 +122,32 @@ $ python -m efficientdet.train \
     --save-dir models/pokemon-models/
 ```
 
+## Evaluate a model
+
+```
+$ python -m efficientdet.eval --help
+
+Usage: eval.py [OPTIONS]
+
+Options:
+  --efficientdet INTEGER          EfficientDet architecture. {0, 1, 2, 3, 4,
+                                  5, 6, 7}
+  --bidirectional / --no-bidirectional
+                                  If bidirectional is set to false the NN will
+                                  behave as a "normal" retinanet, otherwise as
+                                  EfficientDet
+  --format [VOC|labelme]          Dataset to use for training  [required]
+  --test-dataset DIRECTORY        Path to annotations and images  [required]
+  --images-path DIRECTORY         Base path to images. Required when using
+                                  labelme format  [required]
+  --n-classes INTEGER             Number of important classes without taking
+                                  background into account  [required]
+  --classes-names TEXT            Only required when format is labelme. Name
+                                  of classes separated using comma.
+                                  class1,class2,class3
+  --checkpoint PATH               Path to model checkpoint  [required]
+  --help                          Show this message and exit.
+```
 ## Using a trained model
 
 ```python
@@ -131,7 +160,8 @@ effdet = efficientdet.EfficientDet(
 
 effdet.load_weights('...')
 
-images  = tf.random.uniform((3, 512, 512, 3)) # 3 Mock images
+im_size = model.config.input_size
+images  = tf.random.uniform((3, im_size, im_size, 3)) # 3 Mock images
 
 boxes, labels, scores = effdet(images, training=False)
 
@@ -145,9 +175,9 @@ for im_boxes, im_labels in zip(boxes, labels):
 
 ## Roadmap
 
-- [ ] Visualziation utils
+- [ ] Visualization utils
 - [ ] Learning rate schedulers to speed up and enhance training
-- [ ] Proper evaluation using COCO mAP
+- [x] Proper evaluation using COCO mAP
 - [ ] Define a custom data-format to train with custom datasets
 - [ ] Reproduce similar paper results
 - [ ] Migrate anchors code to Tensorflow

@@ -132,7 +132,7 @@ def clip_boxes(boxes: tf.Tensor,
 
 def nms(boxes: tf.Tensor, 
         class_scores: tf.Tensor,
-        score_threshold: float = 0.3) -> tf.Tensor:
+        score_threshold: float = 0.5) -> tf.Tensor:
 
     """
     Parameters

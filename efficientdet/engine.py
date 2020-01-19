@@ -80,7 +80,7 @@ def _COCO_result(image_id: int,
     b_w = bboxes[:, 2] - bboxes[:, 0]
     coco_bboxes = tf.stack([bboxes[:, 0], bboxes[:, 1], b_w, b_h])
     coco_bboxes = tf.transpose(coco_bboxes).numpy().tolist()
-    print(scores)
+
     return [dict(image_id=image_id, 
                  category_id=int(l), 
                  bbox=b,
@@ -126,8 +126,7 @@ def _COCO_gt_annot(image_id: int,
 
 def evaluate(model: tf.keras.Model, 
              dataset: tf.data.Dataset,
-             class2idx: Mapping[str, int],
-             epoch: int):
+             class2idx: Mapping[str, int]):
 
     gt_coco = dict(images=[], annotations=[])
     results_coco = []
@@ -158,7 +157,7 @@ def evaluate(model: tf.keras.Model,
                                               (h, w), gt_labels, gt_boxes)
             gt_coco['annotations'].extend(annots)
             gt_coco['images'].append(im_annot)
-
+            
             preds = categories[batch_idx], bboxes[batch_idx], scores[batch_idx]
             pred_labels, pred_boxes, pred_scores = preds
 

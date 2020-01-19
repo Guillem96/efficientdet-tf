@@ -88,14 +88,14 @@ class EfficientDet(tf.keras.Model):
 
         else:
             # Create the anchors
-            anchors = [anchor_gen(f[0].shape)
-                       for anchor_gen, f in zip(self.anchors_gen, bifnp_features)]
+            anchors = [g(f[0].shape)
+                       for g, f in zip(self.anchors_gen, bifnp_features)]
             anchors = tf.concat(anchors, axis=0)
             
             # Tile anchors over batches, so they can be regressed
             batch_size = bboxes.shape[0]
             anchors = tf.tile(tf.expand_dims(anchors, 0), 
-                              [bboxes.shape[0], 1, 1])
+                              [batch_size, 1, 1])
             
             class_scores = tf.reshape(class_scores, 
                                       [batch_size, -1, self.num_classes])

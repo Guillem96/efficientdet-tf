@@ -57,14 +57,17 @@ def main(**kwargs):
                                   training=False)
 
     labels = [classes[l] for l in labels[0]]
-    print(labels)
 
     im = im.numpy()
-    for l, box in zip(labels, boxes[0].numpy()):
+    for l, box, s in zip(labels, boxes[0].numpy(), scores[0]):
         x1, y1, x2, y2 = box.astype('int32')
-        # c = colors[l]
+
         cv2.rectangle(im, 
                      (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(im, l + ' {:.2f}'.format(s), 
+                    (x1, y1 - 10), 
+                    cv2.FONT_HERSHEY_PLAIN, 
+                    2, (0, 255, 0), 2)
     plt.imshow(im)
     plt.show(block=True)
 

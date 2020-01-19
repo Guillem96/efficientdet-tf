@@ -72,43 +72,24 @@ def train(**kwargs):
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
         model.load_weights(kwargs['checkpoint'])
 
+    ds, class2idx = efficientdet.data.build_ds(
+        format=kwargs['format'],
+        annots_path=kwargs['train_dataset'],
+        images_path=kwargs['images_path'],
+        im_size=(model.config.input_size,) * 2,
+        class_names=kwargs['classes_names'].split(','),
+        batch_size=kwargs['batch_size'])
+
     val_ds = None
-    if kwargs['format'] == 'VOC':
-        class2idx = efficientdet.data.voc.LABEL_2_IDX
-        ds = efficientdet.data.voc.build_dataset(
-            kwargs['train_dataset'],
-            batch_size=kwargs['batch_size'],
-            im_input_size=(model.config.input_size,) * 2)
-        
-        if kwargs['val_dataset']:
-            val_ds = efficientdet.data.voc.build_dataset(
-                kwargs['train_dataset'],
-                shuffle=False,
-                batch_size=kwargs['batch_size'] // 2,
-                im_input_size=(model.config.input_size,) * 2)
-
-    elif kwargs['format'] == 'labelme':
-        assert kwargs['classes_names'] != '', 'You must specify class names'
-        assert kwargs['images_path'] != '', 'Images base path missing'
-
-        class2idx = {c: i 
-            for i, c in enumerate(kwargs['classes_names'].split(','))}
-
-        ds = efficientdet.data.labelme.build_dataset(
-            kwargs['train_dataset'],
-            kwargs['images_path'],
-            batch_size=kwargs['batch_size'],
-            class2idx=class2idx,
-            im_input_size=(model.config.input_size,) * 2)
-        
-        if kwargs['val_dataset']:
-            val_ds = efficientdet.data.labelme.build_dataset(
-                kwargs['train_dataset'],
-                kwargs['images_path'],
-                batch_size=kwargs['batch_size'] // 2,
-                shuffle=False,
-                class2idx=class2idx,
-                im_input_size=(model.config.input_size,) * 2)
+    if kwargs['val_dataset']:
+        val_ds, _ = efficientdet.data.build_ds(
+            format=kwargs['format'],
+            annots_path=kwargs['val_dataset'],
+            images_path=kwargs['images_path'],
+            class_names=kwargs['classes_names'].split(','),
+            im_size=(model.config.input_size,) * 2,
+            shuffle=False,
+            batch_size=kwargs['batch_size'] // 2)
 
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
@@ -132,16 +113,14 @@ def train(**kwargs):
             engine.evaluate(
                 model=model,
                 dataset=val_ds,
-                class2idx=class2idx,
-                epoch=epoch
-            )
-
-        return
+                class2idx=class2idx)
+        
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
         data_format = kwargs['format']
         fname = f'{model_type}_{data_format}_efficientdet_weights_{epoch}.tf'
         fname = save_checkpoint_dir / fname
         model.save_weights(str(fname))
+
 
 @click.command()
 
@@ -173,7 +152,7 @@ def train(**kwargs):
               type=click.Path(file_okay=False, exists=True),
               help='Path to validation annotations. If it is '
                    ' not set by the user, validation won\'t be performed')
-@click.option('--images-path', type=click.Path(file_okay=False, exists=True),
+@click.option('--images-path', type=click.Path(file_okay=False),
               required=True, default='',
               help='Base path to images. '
                    'Required when using labelme format')
