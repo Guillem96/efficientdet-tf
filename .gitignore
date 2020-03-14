@@ -13,7 +13,8 @@ venv/
 .vscode/
 
 # Datasets
-/data/
+/data/*
+!/data/*.sh
 
 # Serialized models
 /models/

@@ -23,7 +23,8 @@ def _train_step(model: tf.keras.Model,
 
         reg_loss, clf_loss = loss_fn(labels, clf_probas, 
                                     regress_targets, regressors)
-        loss = reg_loss + clf_loss
+        l2_loss = 0.01 * tf.reduce_sum(tf.pow(model.weights, 2))
+        loss = reg_loss + clf_loss + l2_loss
 
     grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))

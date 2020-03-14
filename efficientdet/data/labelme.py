@@ -168,6 +168,6 @@ def build_dataset(annotations_path: Union[str, Path],
                         padding_values=(0., (-1, 0.))))
     
     if shuffle:
-        ds = ds.shuffle(128)
+        ds = ds.shuffle(32)
         
     return ds

@@ -96,7 +96,7 @@ def train(**kwargs):
     
     optimizer = tf.optimizers.Adam(
         learning_rate=kwargs['learning_rate'],
-        clipnorm=0.001)
+        clipnorm=1)
 
     for epoch in range(kwargs['epochs']):
 
@@ -135,7 +135,7 @@ def train(**kwargs):
               default=False, help='Wether or not freeze EfficientNet backbone')
 
 # Training parameters
-@click.option('--epochs', type=int, default=100,
+@click.option('--epochs', type=int, default=20,
               help='Number of epochs to train the model')
 @click.option('--batch-size', type=int, default=16,
               help='Dataset batch size')
