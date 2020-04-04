@@ -13,6 +13,13 @@ huber_loss_fn = tf.losses.Huber(
     reduction=tf.losses.Reduction.SUM)
 
 
+def ds_len(ds):
+    i = 0
+    for _ in ds:
+        i += 1
+    return i
+
+
 def loss_fn(y_true_clf: tf.Tensor, 
             y_pred_clf: tf.Tensor, 
             y_true_reg: tf.Tensor, 
@@ -70,15 +77,16 @@ def train(**kwargs):
     
     if kwargs['checkpoint'] is not None:
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
-        model.load_weights(kwargs['checkpoint'])
-
+        model = efficientdet.checkpoint.load(kwargs['checkpoint'])
+    
     ds, class2idx = efficientdet.data.build_ds(
         format=kwargs['format'],
         annots_path=kwargs['train_dataset'],
         images_path=kwargs['images_path'],
         im_size=(model.config.input_size,) * 2,
         class_names=kwargs['classes_names'].split(','),
-        batch_size=kwargs['batch_size'])
+        batch_size=kwargs['batch_size'],
+        data_augmentation=True)
 
     val_ds = None
     if kwargs['val_dataset']:
@@ -89,14 +97,22 @@ def train(**kwargs):
             class_names=kwargs['classes_names'].split(','),
             im_size=(model.config.input_size,) * 2,
             shuffle=False,
+            data_augmentation=False,
             batch_size=kwargs['batch_size'] // 2)
 
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
     
-    optimizer = tf.optimizers.Adam(
-        learning_rate=kwargs['learning_rate'],
-        clipnorm=1)
+    if kwargs['w_scheduler']:
+        lr = efficientdet.optim.EfficientDetLRScheduler(
+            kwargs['epochs'],
+            ds_len(ds))
+    else:
+        lr = kwargs['learning_rate']
+
+    optimizer = tf.optimizers.SGD(
+        learning_rate=lr,
+        momentum=0.9)
 
     for epoch in range(kwargs['epochs']):
 
@@ -109,7 +125,7 @@ def train(**kwargs):
             num_classes=kwargs['n_classes'],
             epoch=epoch)
 
-        if val_ds is not None:
+        if val_ds is not None and (epoch + 1) % 3 == 0:
             engine.evaluate(
                 model=model,
                 dataset=val_ds,
@@ -117,9 +133,9 @@ def train(**kwargs):
         
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
         data_format = kwargs['format']
-        fname = f'{model_type}_{data_format}_efficientdet_weights_{epoch}.tf'
-        fname = save_checkpoint_dir / fname
-        model.save_weights(str(fname))
+        arch = kwargs['efficientdet']
+        save_dir = save_checkpoint_dir / f'{arch}_{model_type}_{data_format}_{epoch}'
+        efficientdet.checkpoint.save(model, kwargs, save_dir)
 
 
 @click.command()
@@ -142,6 +158,9 @@ def train(**kwargs):
 @click.option('--learning-rate', type=float, default=1e-3,
               help='Optimizer learning rate. It is recommended to reduce it '
                    'in case backbone is not frozen')
+@click.option('--w-scheduler/--wo-scheduler', default=True,
+              help='With learning rate scheduler or not. If left to true, '
+                   '--learning-rate option won\'t have any effect')
 
 # Data parameters
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),

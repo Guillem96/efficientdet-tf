@@ -174,11 +174,13 @@ def nms(boxes: tf.Tensor,
 
         for c in range(class_scores.shape[-1]):
             box_scores = class_scores[batch_idx, :, c]
-            indices = tf.image.non_max_suppression(boxes[batch_idx],
-                                                   box_scores,
-                                                   max_output_size=100,
-                                                   iou_threshold=iou_threshold,
-                                                   score_threshold=score_threshold)
+            indices = tf.image.non_max_suppression(
+                boxes[batch_idx],
+                box_scores,
+                max_output_size=100,
+                iou_threshold=iou_threshold,
+                score_threshold=score_threshold)
+                
             if indices.shape[0] > 0:
                 batch_boxes.append(tf.gather(boxes[batch_idx], indices))
                 batch_scores.append(tf.gather(box_scores, indices))

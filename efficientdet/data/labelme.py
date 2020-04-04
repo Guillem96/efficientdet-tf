@@ -106,6 +106,7 @@ def build_dataset(annotations_path: Union[str, Path],
                   class2idx: Mapping[str, int],
                   im_input_size: Tuple[int, int],
                   shuffle: bool = True,
+                  data_augmentation: bool = False,
                   batch_size: int = 2) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
@@ -160,14 +161,19 @@ def build_dataset(annotations_path: Union[str, Path],
                                      class2idx)
     ds = (tf.data.Dataset
           .from_generator(generator=generator, 
-                          output_types=(tf.float32, tf.int32, tf.float32))
-          .map(scale_boxes)
-          .padded_batch(batch_size=batch_size,
-                        padded_shapes=((*im_input_size, 3), 
-                                       ((None,), (None, 4))),
-                        padding_values=(0., (-1, 0.))))
-    
+                          output_types=(tf.float32, tf.int32, tf.float32)))
+
     if shuffle:
-        ds = ds.shuffle(32)
+        ds = ds.shuffle(128)
+    
+    ds = ds.map(scale_boxes)
+
+    if data_augmentation:
+        ds = ds.map(augment)
+          
+    ds = ds.padded_batch(batch_size=batch_size,
+                         padded_shapes=((*im_input_size, 3), 
+                                       ((None,), (None, 4))),
+                         padding_values=(0., (-1, 0.)))
         
     return ds

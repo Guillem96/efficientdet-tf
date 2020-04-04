@@ -176,12 +176,12 @@ for im_boxes, im_labels in zip(boxes, labels):
 ## Roadmap
 
 - [ ] Visualization utils
-- [ ] Learning rate schedulers to speed up and enhance training
+- [x] Learning rate schedulers to speed up and enhance training
 - [x] Proper evaluation using COCO mAP
 - [ ] Define a custom data-format to train with custom datasets
 - [ ] Reproduce similar paper results
 - [ ] Migrate anchors code to Tensorflow
-- [ ] Data augmentation pipelines
+- [x] Data augmentation pipelines
 
 ## References
 

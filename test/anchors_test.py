@@ -77,7 +77,7 @@ class AnchorsTest(unittest.TestCase):
                 box = box.astype('int32')
                 cv2.rectangle(im_random, 
                               (box[0], box[1]), 
-                              (box[2], box[3]), (0, 0, 255), 1)
+                              (box[2], box[3]), (0, 0, 255), 3)
             
             for label in l[0]:
                 print(voc.IDX_2_LABEL[int(label)])

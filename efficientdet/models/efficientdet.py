@@ -28,13 +28,14 @@ class EfficientDet(tf.keras.Model):
                  D : int = 0, 
                  bidirectional: bool = True,
                  freeze_backbone: bool = False,
+                 score_threshold: float = .1,
                  weights : str = 'imagenet'):
                  
         super(EfficientDet, self).__init__()
         self.config = config.EfficientDetCompudScaling(D=D)
         self.anchors_config = config.AnchorsConfig()
         self.num_classes = num_classes
-
+        self.score_threshold = score_threshold
         self.backbone = (models
                          .build_efficient_net_backbone(self.config.B, 
                                                        weights))
@@ -74,10 +75,12 @@ class EfficientDet(tf.keras.Model):
         bifnp_features = self.neck(features, training=training)
 
         # List of [BATCH, A * 4]
-        bboxes = [self.bb_head(bf) for bf in bifnp_features]
+        bboxes = [self.bb_head(bf, training=training) 
+                  for bf in bifnp_features]
 
         # List of [BATCH, A * num_classes]
-        class_scores = [self.class_head(bf) for bf in bifnp_features]
+        class_scores = [self.class_head(bf, training=training) 
+                        for bf in bifnp_features]
 
         # # [BATCH, H, W, A * 4]
         bboxes = tf.concat(bboxes, axis=1)
@@ -104,6 +107,7 @@ class EfficientDet(tf.keras.Model):
 
             boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
             boxes = utils.bndbox.clip_boxes(boxes, images.shape[1:3])
-            boxes, labels, scores = utils.bndbox.nms(boxes, class_scores)
+            boxes, labels, scores = utils.bndbox.nms(
+                boxes, class_scores, score_threshold=self.score_threshold)
             # TODO: Pad output
             return boxes, labels, scores

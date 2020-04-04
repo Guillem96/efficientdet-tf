@@ -1,5 +1,5 @@
 import copy
-from typing import Callable, Tuple, Mapping
+from typing import Callable, Tuple, Mapping, Sequence
 
 import tensorflow as tf
 
@@ -23,7 +23,8 @@ def _train_step(model: tf.keras.Model,
 
         reg_loss, clf_loss = loss_fn(labels, clf_probas, 
                                     regress_targets, regressors)
-        l2_loss = 0.01 * tf.reduce_sum(tf.pow(model.weights, 2))
+        l2_loss = 4e-5 * sum([tf.reduce_sum(tf.pow(w, 2)) 
+                              for w in model.trainable_variables])
         loss = reg_loss + clf_loss + l2_loss
 
     grads = tape.gradient(loss, model.trainable_variables)
@@ -66,10 +67,12 @@ def train_single_epoch(model: tf.keras.Model,
         running_reg_loss(reg_loss)
 
         if (i + 1) % print_every == 0:
+            lr = get_lr(optimizer)
             print(f'Epoch[{epoch}] '
                   f'loss: {running_loss.result():.6f} '
                   f'clf. loss: {running_clf_loss.result():.6f} '
-                  f'reg. loss: {running_reg_loss.result():.6f} ')
+                  f'reg. loss: {running_reg_loss.result():.6f} '
+                  f'learning rate: {lr}')
 
 
 def _COCO_result(image_id: int,

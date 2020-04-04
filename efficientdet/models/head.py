@@ -1,6 +1,8 @@
 import tensorflow as tf
 import math
 
+from . import layers
+
 class RetinaNetBBPredictor(tf.keras.Model):
 
     def __init__(self, 
@@ -10,19 +12,20 @@ class RetinaNetBBPredictor(tf.keras.Model):
         super(RetinaNetBBPredictor, self).__init__()
         self.num_anchors = num_anchors
         self.feature_extractors = [
-            tf.keras.layers.Conv2D(width, 
-                                   kernel_size=3,
-                                   activation='relu',
-                                   padding='same')
+            layers.ConvBlock(width, 
+                             kernel_size=3,
+                             activation='relu',
+                             padding='same')
             for _ in range(depth)]
+
         self.bb_regressor = tf.keras.layers.Conv2D(num_anchors * 4,
                                                    kernel_size=3,
                                                    padding='same')
 
-    def call(self, features):
+    def call(self, features, training=True):
         x = features
         for fe in self.feature_extractors:
-            x = fe(x)
+            x = fe(x, training=training)
         return tf.reshape(self.bb_regressor(x), 
                           [x.shape[0], -1, 4])
 
@@ -39,10 +42,10 @@ class RetinaNetClassifier(tf.keras.Model):
         self.num_classes = num_classes
 
         self.feature_extractors = [
-            tf.keras.layers.Conv2D(width, 
-                                   kernel_size=3,
-                                   activation='relu',
-                                   padding='same')
+            layers.ConvBlock(width, 
+                             kernel_size=3,
+                             activation='relu',
+                             padding='same')
             for _ in range(depth)]
         
         prob = 0.01
@@ -53,10 +56,10 @@ class RetinaNetClassifier(tf.keras.Model):
                                                 padding='same',
                                                 bias_initializer=w_init)
 
-    def call(self, features):
+    def call(self, features, training=True):
         x = features
         for fe in self.feature_extractors:
-            x = fe(x)
+            x = fe(x, training=training)
         return tf.reshape(self.cls_score(x), 
                           [x.shape[0], -1, self.num_classes])
 

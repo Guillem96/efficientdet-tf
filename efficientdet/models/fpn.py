@@ -13,9 +13,9 @@ class Merge(tf.keras.layers.Layer):
                                            kernel_size=3,
                                            strides=1,
                                            padding='same')
-    def call(self, features: tf.Tensor):
+    def call(self, features: tf.Tensor, training=True):
         a, b = features
-        b = self.resize(b, a.shape)
+        b = self.resize(b, a.shape, training=training)
         return self.conv(a + b)
 
 
@@ -51,10 +51,10 @@ class FPN(tf.keras.Model):
 
         P3, P4, P5 = [self.pointwises[i](C[i]) for i in range(3)]
 
-        P4 = self.merge1([P4, P5])
-        P3 = self.merge2([P3, P4])
+        P4 = self.merge1([P4, P5], training=training)
+        P3 = self.merge2([P3, P4], training=training)
         
         P6 = self.gen_P6(C[-1])
         P7 = self.gen_P7(self.relu(P6))
 
-        return P3, P4, P5, P6, P7
+        return [P3, P4, P5, P6, P7]

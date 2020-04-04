@@ -8,22 +8,20 @@ EPSILON = 1e-5
 class FastFusion(tf.keras.layers.Layer):
     def __init__(self, size: int, features: int):
         super(FastFusion, self).__init__()
-        w_init = tf.keras.initializers.constant(1 / size)
 
         self.size = size
+        w_init = tf.keras.initializers.constant(1. / size)
         self.w = tf.Variable(name='w', 
                              initial_value=w_init(shape=(size,)),
                              trainable=True)
-
         self.relu = tf.keras.layers.Activation('relu')
-
-        self.conv = tf.keras.layers.SeparableConv2D(features, 
-                                                    kernel_size=3, 
-                                                    strides=1, 
-                                                    padding='same')
-        self.bn = tf.keras.layers.BatchNormalization()
-        self.relu_2 = tf.keras.layers.Activation('relu')
-
+        
+        self.conv = layers.ConvBlock(separable=True,
+                                     kernel_size=3, 
+                                     strides=1, 
+                                     padding='same', 
+                                     activation='relu')
+        self.sum = tf.keras.layers.Add()
         self.resize = layers.Resize(features)
 
     def call(self, inputs, training=True):
@@ -34,23 +32,21 @@ class FastFusion(tf.keras.layers.Layer):
         """
         # The last feature map has to be resized according to the
         # other inputs
-        inputs[-1] = self.resize(inputs[-1], inputs[0].shape)
+        inputs[-1] = self.resize(
+            inputs[-1], inputs[0].shape, training=training)
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
-        w_sum = EPSILON + tf.reduce_sum(w)
+        w_sum = EPSILON + tf.reduce_sum(w, axis=0)
 
         # List of (BATCH, H, W, C)
         weighted_inputs = [w[i] * inputs[i] for i in range(self.size)]
-        
+
         # Sum weighted inputs
         # (BATCH, H, W, C)
-        weighted_sum = tf.reduce_sum(weighted_inputs, axis=0)
-        fusioned_features = self.conv(weighted_sum / w_sum)
-        fusioned_features = self.bn(fusioned_features, training=training)
-
-        return self.relu_2(fusioned_features)
-
+        weighted_sum = self.sum(weighted_inputs) / w_sum
+        return self.conv(weighted_sum, training=training)
+        
 
 class BiFPNBlock(tf.keras.Model):
 
@@ -97,7 +93,7 @@ class BiFPNBlock(tf.keras.Model):
         P6_out = self.ff_6_out([P6, P6_td, P5_out], training=training)
         P7_out = self.ff_7_out([P7, P6_td], training=training)
 
-        return P3_out, P4_out, P5_out, P6_out, P7_out
+        return [P3_out, P4_out, P5_out, P6_out, P7_out]
 
 
 class BiFPN(tf.keras.Model):
@@ -109,20 +105,20 @@ class BiFPN(tf.keras.Model):
 
         # One pixel-wise for each feature comming from the 
         # bottom-up path
-        self.pixel_wise = [tf.keras.layers.Conv2D(features, kernel_size=1)
+        self.pixel_wise = [layers.ConvBlock(features, kernel_size=1)
                             for _ in range(3)] 
 
-        self.gen_P6 = tf.keras.layers.Conv2D(features, 
-                                             kernel_size=3, 
-                                             strides=2, 
-                                             padding='same')
+        self.gen_P6 = layers.ConvBlock(features, 
+                                       kernel_size=3, 
+                                       strides=2, 
+                                       padding='same')
         
         self.relu = tf.keras.layers.Activation('relu')
 
-        self.gen_P7 = tf.keras.layers.Conv2D(features, 
-                                             kernel_size=3, 
-                                             strides=2, 
-                                             padding='same')
+        self.gen_P7 = layers.ConvBlock(features, 
+                                       kernel_size=3, 
+                                       strides=2, 
+                                       padding='same')
 
         self.blocks = [BiFPNBlock(features) for i in range(n_blocks)]
           
@@ -132,9 +128,10 @@ class BiFPN(tf.keras.Model):
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv
         _, _, *C = inputs
-        P3, P4, P5 = [self.pixel_wise[i](C[i]) for i in range(len(C))]
-        P6 = self.gen_P6(C[-1])
-        P7 = self.gen_P7(self.relu(P6))
+        P3, P4, P5 = [self.pixel_wise[i](C[i], training=training) 
+                      for i in range(len(C))]
+        P6 = self.gen_P6(C[-1], training=training)
+        P7 = self.gen_P7(self.relu(P6), training=training)
 
         features = P3, P4, P5, P6, P7   
         for block in self.blocks:

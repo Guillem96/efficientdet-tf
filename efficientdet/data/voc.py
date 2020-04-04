@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
-from .preprocess import normalize_image
+from .preprocess import normalize_image, augment
 
 
 IDX_2_LABEL = [
@@ -96,7 +96,8 @@ def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor,
 def build_dataset(dataset_path: Union[str, Path],
                   im_input_size: Tuple[int, int],
                   shuffle: bool = True,
-                  batch_size: int = 2) -> tf.data.Dataset:
+                  batch_size: int = 2,
+                  data_augmentation: bool = False) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
 
@@ -111,7 +112,8 @@ def build_dataset(dataset_path: Union[str, Path],
         shape
     batch_size: int, default 2
         Training model batch size
-    
+    data_augmentation: bool, default False
+        Wether or not to apply data augmentation
     Examples
     --------
     
@@ -152,13 +154,18 @@ def build_dataset(dataset_path: Union[str, Path],
                 .map(scale_boxes))
 
     # Join both datasets
-    ds = (tf.data.Dataset.zip((im_ds, annot_ds))
-          .padded_batch(batch_size=batch_size,
-                        padded_shapes=((*im_input_size, 3), 
-                                       ((None,), (None, 4))),
-                        padding_values=(0., (-1, 0.))))
+    ds = tf.data.Dataset.zip((im_ds, annot_ds))
     
+    if data_augmentation:
+        ds = ds.map(augment)
+
     if shuffle:
-        ds = ds.shuffle(32)
+        ds = ds.shuffle(128)
+    
+    ds = ds.padded_batch(batch_size=batch_size,
+                         padded_shapes=((*im_input_size, 3), 
+                                       ((None,), (None, 4))),
+                         padding_values=(0., (-1, 0.)))
+
     
     return ds

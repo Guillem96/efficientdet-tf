@@ -12,6 +12,7 @@ def build_ds(format: str,
              annots_path: str,
              im_size: Tuple[int, int],
              class_names: Sequence[str] = [],
+             data_augmentation: bool = True,
              **kwargs) -> Tuple[tf.data.Dataset, Mapping[str, int]]:
     """Build a tf.data.Dataset with an specific preprocessing
     
@@ -44,6 +45,7 @@ def build_ds(format: str,
         class2idx = efficientdet.data.voc.LABEL_2_IDX
         ds = efficientdet.data.voc.build_dataset(
             annots_path,
+            data_augmentation=data_augmentation,
             im_input_size=im_size,
             **kwargs)
 
@@ -60,6 +62,7 @@ def build_ds(format: str,
             annots_path,
             class2idx=class2idx,
             im_input_size=im_size,
+            data_augmentation=data_augmentation,
             **kwargs)
         
         return ds, class2idx

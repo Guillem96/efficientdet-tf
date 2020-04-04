@@ -3,7 +3,7 @@ import tensorflow as tf
 
 def focal_loss(y_true: tf.Tensor,
                y_pred: tf.Tensor,
-               gamma: int = 2,
+               gamma: int = 1.5,
                alpha: float = 0.25,
                from_logits: bool = False,
                reduction: str = 'sum'):
