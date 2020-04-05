@@ -7,6 +7,7 @@ from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 class EfficientDetLRScheduler(LearningRateSchedule):
 
     def __init__(self, 
+                 max_lr: float,
                  n_epochs: int, 
                  steps_per_epoch: int,
                  alpha: float = 0.):
@@ -18,7 +19,7 @@ class EfficientDetLRScheduler(LearningRateSchedule):
         self.alpha = alpha
 
         self.initial_lr = 0.
-        self.max_lr = 0.16
+        self.max_lr = max_lr
         self.last_step = 0
 
         self.linear_increase = tf.linspace(

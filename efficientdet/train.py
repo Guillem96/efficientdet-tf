@@ -68,17 +68,17 @@ def train(**kwargs):
     save_checkpoint_dir = Path(kwargs['save_dir'])
     save_checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
-    model = efficientdet.models.EfficientDet(
-        kwargs['n_classes'],
-        D=kwargs['efficientdet'],
-        bidirectional=kwargs['bidirectional'],
-        freeze_backbone=kwargs['freeze_backbone'],
-        weights='imagenet')
-    
     if kwargs['checkpoint'] is not None:
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
         model = efficientdet.checkpoint.load(kwargs['checkpoint'])
-    
+    else:
+        model = efficientdet.models.EfficientDet(
+            kwargs['n_classes'],
+            D=kwargs['efficientdet'],
+            bidirectional=kwargs['bidirectional'],
+            freeze_backbone=kwargs['freeze_backbone'],
+            weights='imagenet')
+
     ds, class2idx = efficientdet.data.build_ds(
         format=kwargs['format'],
         annots_path=kwargs['train_dataset'],
@@ -105,8 +105,10 @@ def train(**kwargs):
     
     if kwargs['w_scheduler']:
         lr = efficientdet.optim.EfficientDetLRScheduler(
+            kwargs['learning_rate'],
             kwargs['epochs'],
-            ds_len(ds))
+            (ds_len(ds) // kwargs['grad_accum_steps']) + 1,
+            alpha=1e-5)
     else:
         lr = kwargs['learning_rate']
 
@@ -121,11 +123,13 @@ def train(**kwargs):
             anchors=anchors,
             dataset=ds,
             optimizer=optimizer,
+            grad_accum_steps=kwargs['grad_accum_steps'],
             loss_fn=loss_fn,
             num_classes=kwargs['n_classes'],
-            epoch=epoch)
+            epoch=epoch,
+            print_every=kwargs['print_freq'])
 
-        if val_ds is not None and (epoch + 1) % 3 == 0:
+        if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
             engine.evaluate(
                 model=model,
                 dataset=val_ds,
@@ -155,12 +159,22 @@ def train(**kwargs):
               help='Number of epochs to train the model')
 @click.option('--batch-size', type=int, default=16,
               help='Dataset batch size')
+@click.option('--grad-accum-steps', type=int, default=1,
+              help='Gradient accumulation steps. Simulates a larger batch '
+                   'size, for example if batch_size=16 and grad_accum_steps=2 '
+                   'the simulated batch size is 16 * 2 = 32')
 @click.option('--learning-rate', type=float, default=1e-3,
               help='Optimizer learning rate. It is recommended to reduce it '
                    'in case backbone is not frozen')
 @click.option('--w-scheduler/--wo-scheduler', default=True,
               help='With learning rate scheduler or not. If left to true, '
-                   '--learning-rate option won\'t have any effect')
+                   '--learning-rate option will act as max lr for the scheduler')
+
+# Logging parameters
+@click.option('--print-freq', type=int, default=10,
+              help='Print training loss every n steps')
+@click.option('--validate-freq', type=int, default=3,
+              help='Print COCO evaluations every n epochs')
 
 # Data parameters
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),

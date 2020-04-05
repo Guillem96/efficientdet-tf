@@ -42,12 +42,12 @@ def train_single_epoch(model: tf.keras.Model,
                        anchors: tf.Tensor,
                        dataset: tf.data.Dataset,
                        optimizer: tf.optimizers.Optimizer,
+                       grad_accum_steps: int,
                        loss_fn: LossFn,
                        epoch: int,
                        num_classes: int,
                        print_every: int = 10):
     
-    gradient_accum_steps = 4
     acc_gradients = []
 
     running_loss = tf.metrics.Mean()
@@ -72,7 +72,7 @@ def train_single_epoch(model: tf.keras.Model,
         else:
             acc_gradients = [g1 + g2 for g1, g2 in zip(acc_gradients, grads)]
 
-        if (i + 1) % gradient_accum_steps == 0:
+        if (i + 1) % grad_accum_steps == 0:
             optimizer.apply_gradients(
                 zip(acc_gradients, model.trainable_variables))
             acc_gradients = []
@@ -87,8 +87,11 @@ def train_single_epoch(model: tf.keras.Model,
                   f'loss: {running_loss.result():.6f} '
                   f'clf. loss: {running_clf_loss.result():.6f} '
                   f'reg. loss: {running_reg_loss.result():.6f} '
-                  f'learning rate: {lr}')
+                  f'learning rate: {lr:.6f}')
 
+    if len(acc_gradients) > 0:
+        optimizer.apply_gradients(
+                zip(acc_gradients, model.trainable_variables))
 
 def _COCO_result(image_id: int,
                  labels: tf.Tensor,

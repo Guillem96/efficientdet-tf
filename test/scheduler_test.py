@@ -11,13 +11,23 @@ class SchedulerTest(unittest.TestCase):
     
     def test_scheduler(self):
         epochs = 10
-        steps_per_epoch = 1024
-        scheduler = optim.EfficientDetLRScheduler(epochs, steps_per_epoch)
-        lrs = (scheduler(i) for i in range(epochs * steps_per_epoch))
+
+        max_lr = 3e-3
+        alpha = 1e-2
+
+        steps_per_epoch = 1024 
+        scheduler = optim.EfficientDetLRScheduler(
+            max_lr,
+            epochs, 
+            steps_per_epoch, alpha=alpha)
+
+        lrs = [scheduler(i) for i in range(epochs * steps_per_epoch)]
         epoch_ends_at = [i * steps_per_epoch for i in range(epochs)]
 
-        plt.plot(range(epochs * steps_per_epoch), list(lrs))
-        plt.vlines(epoch_ends_at, 0, 0.16)
+        print('Last lr', lrs[-1])
+
+        plt.plot(range(epochs * steps_per_epoch), lrs)
+        plt.vlines(epoch_ends_at, 0, max_lr)
         plt.show(block=True)
 
 if __name__ == "__main__":
