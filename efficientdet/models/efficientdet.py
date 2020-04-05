@@ -2,9 +2,12 @@ from typing import List
 
 import tensorflow as tf
 
+
 import efficientdet.utils as utils
 import efficientdet.config as config
+
 from efficientdet import models
+from efficientdet.checkpoint import load
 
 
 class EfficientDet(tf.keras.Model):
@@ -111,3 +114,37 @@ class EfficientDet(tf.keras.Model):
                 boxes, class_scores, score_threshold=self.score_threshold)
             # TODO: Pad output
             return boxes, labels, scores
+    
+    @classmethod
+    def from_pretrained(cls, 
+                        checkpoint_path: Union[Path, str], 
+                        num_classes: int = None,
+                        **kwargs) -> 'EfficientDet':
+        """
+        Instantiates an efficientdet model with pretreined weights.
+        For transfer learning, the classifier head can be overwritten by
+        a new randomly initialized one.
+
+        Parameters
+        ----------
+        checkpoint_path: Union[Path, str]
+            Checkpoint directory
+        num_classes: int, default None
+            If left to None the model will have the checkpoint head, 
+            otherwise the head will be overwrite with a new randomly initialized
+            classification head. Useful when training on your own dataset
+        
+        Returns
+        ------- 
+        EfficientDet
+        """
+        # TODO: Make checkpoint path also a reference to a path.
+        # For example: EfficientDet.from_pretrained('voc')
+        
+        model, _ = load(checkpoint_path, **kwargs)
+
+        if num_classes is not None:
+            model.class_head = models.RetinaNetClassifier(
+                model.config.Wbifpn, model.config.D, num_classes)
+
+        return model

@@ -44,7 +44,7 @@ def save(model: EfficientDet,
             blob.upload_from_filename(str(p))
 
 
-def load(save_dir: Union[str, Path]) -> EfficientDet:
+def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
     """
     Load efficientdet model from google cloud storage or from local
     file.
@@ -79,7 +79,8 @@ def load(save_dir: Union[str, Path]) -> EfficientDet:
         D=hp['efficientdet'],
         bidirectional=hp['bidirectional'],
         freeze_backbone=True,
-        weights=None)
+        weights=None,
+        **kwargs)
     model.load_weights(str(model_fname))
-    return model
+    return model, hp
     

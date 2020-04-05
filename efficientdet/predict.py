@@ -11,12 +11,6 @@ import efficientdet
 @click.command()
 @click.option('--image', type=click.Path(dir_okay=False, exists=True))
 @click.option('--checkpoint', type=click.Path())
-@click.option('--efficientdet', type=int, default=0,
-              help='EfficientDet architecture. '
-                   '{0, 1, 2, 3, 4, 5, 6, 7}')
-@click.option('--bidirectional/--no-bidirectional', default=True,
-              help='If bidirectional is set to false the NN will behave as '
-                   'a "normal" retinanet, otherwise as EfficientDet')
 
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
@@ -28,8 +22,11 @@ import efficientdet
                    'class1,class2,class3')
 def main(**kwargs):
 
+    model, params = efficientdet.checkpoint.load(
+        kwargs['checkpoint'], score_threshold=.9)
+
     if kwargs['format'] == 'labelme':
-        classes = kwargs['classes_names'].split(',')
+        classes = params['classes_names'].split(',')
         class2idx = {c: i for i, c in enumerate(classes)}
         n_classes = len(classes)
 
@@ -38,16 +35,6 @@ def main(**kwargs):
         classes = efficientdet.data.voc.IDX_2_LABEL
         n_classes = 20
     
-    # Load model
-    model = efficientdet.EfficientDet(
-        num_classes=n_classes,
-        D=kwargs['efficientdet'],
-        bidirectional=kwargs['bidirectional'],
-        freeze_backbone=True,
-        weights=None)
-
-    model.load_weights(kwargs['checkpoint'])
-
     # load image
     im_size = model.config.input_size
     im = efficientdet.utils.io.load_image(kwargs['image'], (im_size,) * 2)
@@ -68,7 +55,9 @@ def main(**kwargs):
                     (x1, y1 - 10), 
                     cv2.FONT_HERSHEY_PLAIN, 
                     2, (0, 255, 0), 2)
+                    
     plt.imshow(im)
+    plt.axis('off')
     plt.show(block=True)
 
 

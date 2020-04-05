@@ -4,21 +4,25 @@ import efficientdet
 import efficientdet.engine as engine
 
 def evaluate(**kwargs):
-    model = efficientdet.models.EfficientDet(
-        kwargs['n_classes'],
-        D=kwargs['efficientdet'],
-        bidirectional=kwargs['bidirectional'],
-        freeze_backbone=True,
-        weights=None)
+    model, params = efficientdet.checkpoint.load(kwargs['checkpoint'])
     
-    model.load_weights(kwargs['checkpoint'])
+    if kwargs['format'] == 'labelme':
+        classes = params['classes_names'].split(',')
+        class2idx = {c: i for i, c in enumerate(classes)}
+        n_classes = len(classes)
+
+    elif kwargs['format'] == 'VOC':
+        class2idx = efficientdet.data.voc.LABEL_2_IDX
+        classes = efficientdet.data.voc.IDX_2_LABEL
+        n_classes = 20
 
     ds, class2idx = efficientdet.data.build_ds(
         format=kwargs['format'],
         annots_path=kwargs['test_dataset'],
         images_path=kwargs['images_path'],
         im_size=(model.config.input_size,) * 2,
-        class_names=kwargs['classes_names'].split(','),
+        class_names=params['classes_names'].split(','),
+        data_augmentation=False,
         batch_size=1)
     
     engine.evaluate(
@@ -29,14 +33,6 @@ def evaluate(**kwargs):
 
 @click.command()
 
-# Neural network parameters
-@click.option('--efficientdet', type=int, default=0,
-              help='EfficientDet architecture. '
-                   '{0, 1, 2, 3, 4, 5, 6, 7}')
-@click.option('--bidirectional/--no-bidirectional', default=True,
-              help='If bidirectional is set to false the NN will behave as '
-                   'a "normal" retinanet, otherwise as EfficientDet')
-
 # Data parameters
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
@@ -46,14 +42,6 @@ def evaluate(**kwargs):
               required=True, default='',
               help='Base path to images. '
                    'Required when using labelme format')
-@click.option('--n-classes', type=int, required=True,
-              help='Number of important classes without '
-                   'taking background into account')
-@click.option('--classes-names', 
-              default='', type=str, 
-              help='Only required when format is labelme. '
-                   'Name of classes separated using comma. '
-                   'class1,class2,class3')
 
 # Checkpointing parameters
 @click.option('--checkpoint', help='Path to model checkpoint',
