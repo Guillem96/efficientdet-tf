@@ -11,6 +11,13 @@ import efficientdet.utils as utils
 LossFn = Callable[[tf.Tensor] * 4, Tuple[tf.Tensor, tf.Tensor]]
 
 
+def get_lr(optimizer):
+    lr = optimizer.learning_rate
+    if isinstance(lr, tf.keras.optimizers.schedules.LearningRateSchedule):
+        return lr.current_lr
+    return lr
+
+
 def _train_step(model: tf.keras.Model,
                 optimizer: tf.optimizers.Optimizer,
                 loss_fn: LossFn,
