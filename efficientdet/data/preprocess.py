@@ -54,7 +54,7 @@ def horizontal_flip(image: tf.Tensor,
     # Flip the image
     image = tf.image.flip_left_right(image)
     
-    # Flip the boc
+    # Flip the box
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=-1)
 
     bb_w = x2 - x1
@@ -139,7 +139,7 @@ def augment(image: tf.Tensor,
             annots: Tuple[tf.Tensor, tf.Tensor]) -> Tuple[tf.Tensor, 
                                                           tf.Tensor, 
                                                           tf.Tensor]:
-    
+
     image, annots = tf.cond(tf.random.uniform([1]) < .5,
                             lambda: horizontal_flip(image, annots),
                             lambda: no_transform(image, annots))

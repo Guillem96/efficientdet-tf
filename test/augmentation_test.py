@@ -2,7 +2,6 @@ import unittest
 
 import cv2
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
 
 from efficientdet import data
@@ -14,7 +13,9 @@ class AugmentationTest(unittest.TestCase):
         super(AugmentationTest, self).__init__(*args, **kwargs)
         classes = ['treecko', 'psyduck', 'greninja', 'solgaleo', 'mewtwo']
         class2idx = {c: i for i, c in enumerate(classes)}
-        ds = data.voc.build_dataset('test/data/VOC2007',
+        ds = data.labelme.build_dataset('data/pokemon',
+        'data/pokemon',
+        class2idx,
                                         im_input_size=(512, 512),
                                         batch_size=1)
         self.ds = ds.unbatch()

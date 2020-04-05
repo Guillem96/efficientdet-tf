@@ -11,6 +11,8 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+with open(path.join(here, 'requirements.txt')) as f:
+    requires = [r for r in f.readlines() if not r.startwith('#')]
 
 class BuildExtension(Command):
     description     = DistUtilsBuildExt.description
@@ -83,7 +85,7 @@ setup(
     packages=find_packages(exclude=['test', 'test.*']),
     python_requires='>=3.6',
 
-    install_requires=[], # TODO: Read from requirements
+    install_requires=requires,
     ext_modules=extensions,
     # TODO: Entrypoint to train and evaluate
     project_urls={ 

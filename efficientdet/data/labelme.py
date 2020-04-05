@@ -6,6 +6,7 @@ Read more about labelme here:
 """
 
 import json
+import random
 from pathlib import Path
 from functools import partial
 from typing import Mapping, Tuple, Sequence, Union
@@ -14,7 +15,7 @@ import tensorflow as tf
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
-from .preprocess import normalize_image
+from .preprocess import normalize_image, augment
 
 
 def _load_bbox_from_rectangle(points: Sequence[float]) -> Sequence[float]:
@@ -151,7 +152,9 @@ def build_dataset(annotations_path: Union[str, Path],
 
     # List sorted annotation files
     annot_files = sorted(annotations_path.glob('*.json'))
-    
+    if shuffle:
+        random.shuffle(annot_files)
+
     # Scale the boxes with the same shape
     scale_boxes = partial(_scale_boxes, to_size=im_input_size)
 
@@ -159,14 +162,15 @@ def build_dataset(annotations_path: Union[str, Path],
                                      annot_files, 
                                      im_input_size, 
                                      class2idx)
+    output_shapes = (tf.TensorShape([*im_input_size, 3]), 
+                     tf.TensorShape([None]),
+                     tf.TensorShape([None, 4]))
+
     ds = (tf.data.Dataset
           .from_generator(generator=generator, 
-                          output_types=(tf.float32, tf.int32, tf.float32)))
-
-    if shuffle:
-        ds = ds.shuffle(128)
-    
-    ds = ds.map(scale_boxes)
+                          output_types=(tf.float32, tf.int32, tf.float32),
+                          output_shapes=output_shapes)
+          .map(scale_boxes))
 
     if data_augmentation:
         ds = ds.map(augment)
