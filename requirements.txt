@@ -3,5 +3,7 @@ efficientnet>=1.0.0
 opencv-python>=4.1.2.30
 
 Click>=7.0
-
 Cython>=0.29.14
+pycocotools==2.0.0
+
+google-cloud-storage

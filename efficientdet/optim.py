@@ -23,14 +23,17 @@ class EfficientDetLRScheduler(LearningRateSchedule):
 
         self.linear_increase = tf.linspace(
             self.initial_lr, self.max_lr, self.steps_per_epoch)
+        
         self.total_steps = n_epochs * steps_per_epoch
+        self.warmup_steps = steps_per_epoch
+        self.decay_steps = self.total_steps - self.warmup_steps
 
     @property
     def current_lr(self):
-        if self.last_step < self.steps_per_epoch:
+        if self.last_step < self.warmup_steps:
             return self.linear_increase[self.last_step]
         else:
-            rate = self.last_step / self.total_steps
+            rate = (self.last_step - self.warmup_steps) / self.decay_steps
             cosine_decayed = 0.5 * (1.0 + tf.cos(
                 tf.constant(math.pi) * rate))
             decayed = (1 - self.alpha) * cosine_decayed + self.alpha
