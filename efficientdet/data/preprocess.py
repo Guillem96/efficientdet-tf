@@ -116,8 +116,8 @@ def crop(image: tf.Tensor,
 
     # Create a mask to avoid tiny boxes
     areas = widths * heights
-    # Min area is the 10 per cent of the whole area
-    min_area = .1 * (crop_height * crop_height)
+    # Min area is the 5 per cent of the whole area
+    min_area = .05 * (crop_height * crop_height)
     large_areas = tf.reshape(tf.greater_equal(areas, min_area), [-1])
 
     # Get only large enough boxes

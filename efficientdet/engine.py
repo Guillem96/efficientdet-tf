@@ -35,9 +35,7 @@ def _train_step(model: tf.keras.Model,
         loss = reg_loss + clf_loss + l2_loss
 
     grads = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
-    return reg_loss, clf_loss
+    return reg_loss, clf_loss, grads
 
 
 def train_single_epoch(model: tf.keras.Model,
@@ -49,6 +47,9 @@ def train_single_epoch(model: tf.keras.Model,
                        num_classes: int,
                        print_every: int = 10):
     
+    gradient_accum_steps = 4
+    acc_gradients = []
+
     running_loss = tf.metrics.Mean()
     running_clf_loss = tf.metrics.Mean()
     running_reg_loss = tf.metrics.Mean()
@@ -62,13 +63,20 @@ def train_single_epoch(model: tf.keras.Model,
                                               labels.numpy(), 
                                               num_classes)
 
-        reg_loss, clf_loss = _train_step(model=model, 
-                                         optimizer=optimizer, 
-                                         loss_fn=loss_fn,
-                                         images=images, 
-                                         regress_targets=target_reg, 
-                                         labels=target_clf)
+        reg_loss, clf_loss, grads = _train_step(
+            model=model, optimizer=optimizer, loss_fn=loss_fn,
+            images=images, regress_targets=target_reg, labels=target_clf)
 
+        if len(acc_gradients) == 0:
+            acc_gradients = grads 
+        else:
+            acc_gradients = [g1 + g2 for g1, g2 in zip(acc_gradients, grads)]
+
+        if (i + 1) % gradient_accum_steps == 0:
+            optimizer.apply_gradients(
+                zip(acc_gradients, model.trainable_variables))
+            acc_gradients = []
+        
         running_loss(reg_loss + clf_loss)
         running_clf_loss(clf_loss)
         running_reg_loss(reg_loss)
