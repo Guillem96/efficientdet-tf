@@ -93,6 +93,7 @@ def train_single_epoch(model: tf.keras.Model,
         optimizer.apply_gradients(
                 zip(acc_gradients, model.trainable_variables))
 
+
 def _COCO_result(image_id: int,
                  labels: tf.Tensor,
                  bboxes: tf.Tensor,
@@ -103,11 +104,11 @@ def _COCO_result(image_id: int,
     coco_bboxes = tf.stack([bboxes[:, 0], bboxes[:, 1], b_w, b_h])
     coco_bboxes = tf.transpose(coco_bboxes).numpy().tolist()
 
-    return [dict(image_id=image_id, 
-                 category_id=int(l), 
-                 bbox=b,
-                 score=float(s)) 
-                 for l, b, s in zip(labels, coco_bboxes, scores)]
+    labels = labels.numpy().tolist()
+    scores = scores.numpy().tolist()
+
+    return [dict(image_id=image_id, category_id=l, bbox=b,score=s) 
+            for l, b, s in zip(labels, coco_bboxes, scores)]
 
 
 def _COCO_gt_annot(image_id: int,
@@ -121,27 +122,20 @@ def _COCO_gt_annot(image_id: int,
     b_h = bboxes[:, 3] - bboxes[:, 1]
     b_w = bboxes[:, 2] - bboxes[:, 0]
     areas = tf.reshape(b_h * b_w, [-1])
+    areas = areas.numpy().tolist()
 
     coco_bboxes = tf.stack([bboxes[:, 0], bboxes[:, 1], b_w, b_h])
     coco_bboxes = tf.transpose(coco_bboxes).numpy().tolist()
 
-    image = {
-        'id': image_id,
-        'height': im_h,
-        'width': im_w,
-    }
+    labels = labels.numpy().tolist()
 
-    annotations = []
-    for i in range(len(coco_bboxes)):
-        annotations.append({
-            'id': annot_id,
-            'image_id': image_id,
-            'bbox': coco_bboxes[i],
-            'iscrowd': 0,
-            'area': float(areas[i]),
-            'category_id': int(labels[i])
-        })
-        annot_id += 1
+    image = dict(id=image_id, height=im_h, width=im_w)
+
+    it = zip(coco_bboxes, areas, labels)
+    annotations = [
+        dict(id=id_, image_id=image_id, bbox=bbox, iscrowd=0, 
+             area=a, category_id=l)
+        for id_, (bbox, a, l) in enumerate(it, start=annot_id)]
 
     return image, annotations
     

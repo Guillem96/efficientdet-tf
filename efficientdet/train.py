@@ -108,7 +108,7 @@ def train(**kwargs):
             kwargs['learning_rate'],
             kwargs['epochs'],
             (ds_len(ds) // kwargs['grad_accum_steps']) + 1,
-            alpha=1e-5)
+            alpha=kwargs['alpha'])
     else:
         lr = kwargs['learning_rate']
 
@@ -138,7 +138,8 @@ def train(**kwargs):
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
         data_format = kwargs['format']
         arch = kwargs['efficientdet']
-        save_dir = save_checkpoint_dir / f'{arch}_{model_type}_{data_format}_{epoch}'
+        save_dir = (save_checkpoint_dir / 
+                    f'{arch}_{model_type}_{data_format}_{epoch}')
         efficientdet.checkpoint.save(model, kwargs, save_dir)
 
 
@@ -169,7 +170,9 @@ def train(**kwargs):
 @click.option('--w-scheduler/--wo-scheduler', default=True,
               help='With learning rate scheduler or not. If left to true, '
                    '--learning-rate option will act as max lr for the scheduler')
-
+@click.option('--alpha', type=float, default=1.,
+              help='Proportion to reduce the learning rate during '
+                   'the decay period')
 # Logging parameters
 @click.option('--print-freq', type=int, default=10,
               help='Print training loss every n steps')

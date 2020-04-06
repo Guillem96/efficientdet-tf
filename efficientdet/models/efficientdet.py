@@ -1,4 +1,5 @@
-from typing import List
+from pathlib import Path
+from typing import List, Union
 
 import tensorflow as tf
 
@@ -136,10 +137,15 @@ class EfficientDet(tf.keras.Model):
         ------- 
         EfficientDet
         """
-        # TODO: Make checkpoint path also a reference to a path.
-        # For example: EfficientDet.from_pretrained('voc')
+        AVAILABLE_MODELS = {
+            'D0-VOC2007': 'gs://ml-generic-purpose-tf-models/D0-VOC2007'}
 
+        # TODO: Make checkpoint path also a reference to a path.
+        # For example: EfficientDet.from_pretrained('voc')        
         from efficientdet.checkpoint import load
+
+        if str(checkpoint_path) in AVAILABLE_MODELS:
+            checkpoint_path = AVAILABLE_MODELS[checkpoint_path]
 
         model, _ = load(checkpoint_path, **kwargs)
 

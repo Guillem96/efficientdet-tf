@@ -116,18 +116,18 @@ def crop(image: tf.Tensor,
 
     # Create a mask to avoid tiny boxes
     areas = widths * heights
-    # Min area is the 5 per cent of the whole area
-    min_area = .05 * (crop_height * crop_height)
+    # Min area is the 1 per cent of the whole area
+    min_area = .01 * (crop_height * crop_height)
     large_areas = tf.reshape(tf.greater_equal(areas, min_area), [-1])
 
     # Get only large enough boxes
     boxes = tf.boolean_mask(boxes, large_areas, axis=0)
-
     labels = tf.boolean_mask(labels, large_areas)
 
     # Scale the boxes to original image
     boxes = bb_utils.scale_boxes(
         boxes, tuple(image.shape[:-1]), (crop_height, crop_width))
+
     return crop_im, (labels, boxes)
 
 
@@ -144,8 +144,8 @@ def augment(image: tf.Tensor,
                             lambda: horizontal_flip(image, annots),
                             lambda: no_transform(image, annots))
 
-    image, annots = tf.cond(tf.random.uniform([1]) < .5,
-                            lambda: crop(image, annots),
-                            lambda: no_transform(image, annots))
+    # image, annots = tf.cond(tf.random.uniform([1]) < .5,
+    #                         lambda: crop(image, annots),
+    #                         lambda: no_transform(image, annots))
                             
     return image, annots

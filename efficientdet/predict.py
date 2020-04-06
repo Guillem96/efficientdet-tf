@@ -11,6 +11,7 @@ import efficientdet
 @click.command()
 @click.option('--image', type=click.Path(dir_okay=False, exists=True))
 @click.option('--checkpoint', type=click.Path())
+@click.option('--score', type=float, default=.6)
 
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
@@ -23,7 +24,7 @@ import efficientdet
 def main(**kwargs):
 
     model, params = efficientdet.checkpoint.load(
-        kwargs['checkpoint'], score_threshold=.9)
+        kwargs['checkpoint'], score_threshold=kwargs['score'])
 
     if kwargs['format'] == 'labelme':
         classes = params['classes_names'].split(',')

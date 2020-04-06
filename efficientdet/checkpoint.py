@@ -55,7 +55,7 @@ def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
     save_dir_url = urlparse(str(save_dir))
 
     if save_dir_url.scheme == 'gs':
-        save_dir = Path('.checkpoints', save_dir_url.path)
+        save_dir = Path(Path.home(), '.effdet-checkpoints', save_dir_url.path)
         save_dir.mkdir(exist_ok=True, parents=True)
 
         client = storage.Client()
