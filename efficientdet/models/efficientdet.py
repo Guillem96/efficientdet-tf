@@ -2,12 +2,10 @@ from typing import List
 
 import tensorflow as tf
 
-
 import efficientdet.utils as utils
 import efficientdet.config as config
 
 from efficientdet import models
-from efficientdet.checkpoint import load
 
 
 class EfficientDet(tf.keras.Model):
@@ -140,7 +138,9 @@ class EfficientDet(tf.keras.Model):
         """
         # TODO: Make checkpoint path also a reference to a path.
         # For example: EfficientDet.from_pretrained('voc')
-        
+
+        from efficientdet.checkpoint import load
+
         model, _ = load(checkpoint_path, **kwargs)
 
         if num_classes is not None:
