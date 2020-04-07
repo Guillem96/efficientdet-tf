@@ -71,6 +71,16 @@ def train(**kwargs):
     if kwargs['checkpoint'] is not None:
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
         model = efficientdet.checkpoint.load(kwargs['checkpoint'])
+    elif kwargs['from_pretrained'] is not None:
+        model = (efficientdet.EfficientDet
+                 .from_pretrained(kwargs['from_pretrained'], 
+                                  num_classes=kwargs['n_classes']))
+        for l in model.layers:
+            l.trainable = True
+        model.trainable = True
+        print('Training from a pretrained model...')
+        print('This will override any configuration related to EfficientNet'
+              ' using the defined in the pretrained model.')
     else:
         model = efficientdet.models.EfficientDet(
             kwargs['n_classes'],
@@ -204,6 +214,11 @@ def train(**kwargs):
 # Checkpointing parameters
 @click.option('--checkpoint', help='Path to model checkpoint',
               type=click.Path(), default=None)
+@click.option('--from-pretrained', 
+              help='Path or reference to pretrained model. For example' 
+                   ' if you want to train a model from a VOC pretrained '
+                   'checkpoint, use the value --from-pretrained D0-VOC',
+              type=str, default=None)
 @click.option('--save-dir', help='Directory to save model weights',
               required=True, default='models', 
               type=click.Path(file_okay=False))

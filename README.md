@@ -9,20 +9,19 @@ tensorflow 2.
 
 ## Pretrained weights
 
-[![](https://img.shields.io/badge/Weights-VOC%202007-9cf)](https://google.com)
+![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
 
-How to use pretrained weights?
+How to use pretrained models:
 
-1. Download the weights by clicking the badge you prefer.
-2. Unzip TODO
-3. Load the model
+1. Choose your favourite badge. For example: ![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
+2. Load the model referencing the badge (use the white and blue text) as shown below.
 
 ```python
 from efficientdet import EfficientDet
 
-chckp_path = 'path_to_unzipped_dir'
+badge_name = 'D0-VOC'
 # With pretrained classifiaction head
-model = EfficientDet.from_pretrained(chckp_path)
+model = EfficientDet.from_pretrained(badge_name)
 
 # With custom head
 # Note: This will initialize a random classifier head, so it requires
@@ -30,6 +29,16 @@ model = EfficientDet.from_pretrained(chckp_path)
 model = EfficientDet.from_pretrained(chckp_path, 
                                      num_classes=<your_n_classes>)
 ```
+
+Transfer learning using the CLI.
+
+```
+$ python -m efficientdet.train *usual-parameters* \
+  --from-pretrained <badge_reference> # For example, D0-VOC
+```
+
+This will automatically append a custom classification head to a pretrained model, and start training.
+
 
 ## Training the model
 
@@ -195,12 +204,16 @@ for im_boxes, im_labels in zip(boxes, labels):
 
 ## Roadmap
 
-- [ ] Visualization utils
+The road map is ordered by priority. Depending on my feelings this can go up and down, so don't take it as somthing that will be done immediately.
+
+- [ ] Migrate anchors code to Tensorflow
+- [ ] Define COCO input pipeline using `tf.data`
+- [ ] Distribute training over multiple GPUs
 - [x] Learning rate schedulers to speed up and enhance training
 - [x] Proper evaluation using COCO mAP
-- [ ] Define a custom data-format to train with custom datasets
 - [ ] Reproduce similar paper results
-- [ ] Migrate anchors code to Tensorflow
+- [ ] Visualization utils
+- [ ] Define a custom data-format to train with custom datasets
 - [x] Data augmentation pipelines
 
 ## References

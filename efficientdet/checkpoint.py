@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Union
 from urllib.parse import urlparse
 
+import tensorflow as tf
+
 from google import auth
 from google.cloud import storage
 from .models import EfficientDet
@@ -39,12 +41,15 @@ def save(model: EfficientDet,
         client = storage.Client(project='ml-generic-purpose')
         bucket = client.bucket('ml-generic-purpose-tf-models')
         prefix = save_dir.stem
-        for p in save_dir.iterdir():
-            blob = bucket.blob(f'{prefix}/{p.stem}{p.suffix}')
-            blob.upload_from_filename(str(p))
+
+        blob = bucket.blob(f'{prefix}/hp.json')
+        blob.upload_from_filename(str(hp_fname))
+
+        model.save_weights(
+            f'gs://ml-generic-purpose-tf-models/{prefix}/model.tf')
 
 
-def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
+def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
     """
     Load efficientdet model from google cloud storage or from local
     file.
@@ -52,11 +57,12 @@ def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
     In case you want to download the model from gsc use a path formated
     as follows: gs://{bucket}/{model_dir}
     """
-    save_dir_url = urlparse(str(save_dir))
+    save_dir_url = urlparse(str(save_dir_or_url))
 
     if save_dir_url.scheme == 'gs':
-        save_dir = Path.home() / '.effdet-checkpoints' / save_dir_url.path[1:]
+        save_dir = Path.home() / '.effdet-checkpoints'
         save_dir.mkdir(exist_ok=True, parents=True)
+        
         auth.credentials.AnonymousCredentials()
         client = storage.Client(
             project='ml-generic-purpose',
@@ -69,16 +75,17 @@ def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
         for blob in blobs:
             fname = save_dir / blob.name.replace(prefix, '')
             blob.download_to_filename(fname)
+        
+        hp_fname = save_dir / 'hp.json'
+        model_path = save_dir / 'model.tf'
     else:
-        save_dir = Path(save_dir)
+        hp_fname = Path(save_dir_or_url) / 'hp.json'
+        model_path = Path(save_dir_or_url) / 'model.tf'
 
-    chkp_check = save_dir / 'model.tf.index'
-    model_fname = save_dir / 'model.tf'
-    hp_fname = save_dir / 'hp.json'
+    assert hp_fname.exists()
 
-    assert chkp_check.exists() and hp_fname.exists()
-
-    hp = json.load(hp_fname.open())
+    with hp_fname.open() as f:
+        hp = json.load(f)
 
     model = EfficientDet(
         hp['n_classes'],
@@ -87,6 +94,12 @@ def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
         freeze_backbone=True,
         weights=None,
         **kwargs)
-    model.load_weights(str(model_fname))
+    
+    print('Loading model weights from {}...'.format(str(model_path)))
+    model.load_weights(str(model_path))
+    for l in model.layers:
+        l.trainable = False
+    model.trainable = False
+    
     return model, hp
     

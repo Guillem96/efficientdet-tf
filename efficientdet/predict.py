@@ -16,25 +16,19 @@ import efficientdet
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
 
-@click.option('--classes-names', 
-              default='', type=str, 
-              help='Only required when format is labelme. '
-                   'Name of classes separated using comma. '
-                   'class1,class2,class3')
 def main(**kwargs):
 
-    model, params = efficientdet.checkpoint.load(
-        kwargs['checkpoint'], score_threshold=kwargs['score'])
+    # _, params = efficientdet.checkpoint.load(
+    #     kwargs['checkpoint'], score_threshold=kwargs['score'])
+
+    model = efficientdet.EfficientDet.from_pretrained('D0-VOC', 
+                                      score_threshold=.6)
 
     if kwargs['format'] == 'labelme':
         classes = params['classes_names'].split(',')
-        class2idx = {c: i for i, c in enumerate(classes)}
-        n_classes = len(classes)
 
     elif kwargs['format'] == 'VOC':
-        class2idx = efficientdet.data.voc.LABEL_2_IDX
         classes = efficientdet.data.voc.IDX_2_LABEL
-        n_classes = 20
     
     # load image
     im_size = model.config.input_size
@@ -56,7 +50,7 @@ def main(**kwargs):
                     (x1, y1 - 10), 
                     cv2.FONT_HERSHEY_PLAIN, 
                     2, (0, 255, 0), 2)
-                    
+    
     plt.imshow(im)
     plt.axis('off')
     plt.show(block=True)

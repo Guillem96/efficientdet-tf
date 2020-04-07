@@ -114,9 +114,8 @@ class EfficientDet(tf.keras.Model):
             # TODO: Pad output
             return boxes, labels, scores
     
-    @classmethod
-    def from_pretrained(cls, 
-                        checkpoint_path: Union[Path, str], 
+    @staticmethod
+    def from_pretrained(checkpoint_path: Union[Path, str], 
                         num_classes: int = None,
                         **kwargs) -> 'EfficientDet':
         """
@@ -138,7 +137,7 @@ class EfficientDet(tf.keras.Model):
         EfficientDet
         """
         AVAILABLE_MODELS = {
-            'D0-VOC2007': 'gs://ml-generic-purpose-tf-models/D0-VOC2007'}
+            'D0-VOC': 'gs://ml-generic-purpose-tf-models/D0-VOC'}
 
         # TODO: Make checkpoint path also a reference to a path.
         # For example: EfficientDet.from_pretrained('voc')        
@@ -151,6 +150,7 @@ class EfficientDet(tf.keras.Model):
 
         if num_classes is not None:
             print('Loading a custom classification head...')
+            model.num_classes = num_classes
             model.class_head = models.RetinaNetClassifier(
                 model.config.Wbifpn, model.config.D, num_classes)
 
