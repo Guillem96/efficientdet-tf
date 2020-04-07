@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 with open(path.join(here, 'requirements.txt')) as f:
-    requires = [r for r in f.readlines() if not r.startwith('#')]
+    requires = [r for r in f.readlines() if not r.startswith('#')]
 
 class BuildExtension(Command):
     description     = DistUtilsBuildExt.description
