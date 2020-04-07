@@ -1,8 +1,35 @@
 # EfficientDet - Tensorflow 2 
 
+![](https://raw.githubusercontent.com/aleen42/badges/master/src/tensorflow.svg?sanitize=true)
+
 Custom implementation of [EfficientDet](https://arxiv.org/abs/1911.09070) using 
 tensorflow 2.
 
+![Cat example](imgs/voc2007_1.png)
+
+## Pretrained weights
+
+[![](https://img.shields.io/badge/Weights-VOC%202007-9cf)](https://google.com)
+
+How to use pretrained weights?
+
+1. Download the weights by clicking the badge you prefer.
+2. Unzip TODO
+3. Load the model
+
+```python
+from efficientdet import EfficientDet
+
+chckp_path = 'path_to_unzipped_dir'
+# With pretrained classifiaction head
+model = EfficientDet.from_pretrained(chckp_path)
+
+# With custom head
+# Note: This will initialize a random classifier head, so it requires
+# fine tuning
+model = EfficientDet.from_pretrained(chckp_path, 
+                                     num_classes=<your_n_classes>)
+```
 
 ## Training the model
 
