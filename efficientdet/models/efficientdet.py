@@ -150,6 +150,7 @@ class EfficientDet(tf.keras.Model):
         model, _ = load(checkpoint_path, **kwargs)
 
         if num_classes is not None:
+            print('Loading a custom classification head...')
             model.class_head = models.RetinaNetClassifier(
                 model.config.Wbifpn, model.config.D, num_classes)
 

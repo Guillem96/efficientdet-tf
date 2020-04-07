@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Union
 from urllib.parse import urlparse
 
+from google import auth
 from google.cloud import storage
-
 from .models import EfficientDet
 
 
@@ -36,7 +36,7 @@ def save(model: EfficientDet,
     model.save_weights(str(model_fname))
 
     if to_gcs:
-        client = storage.Client()
+        client = storage.Client(project='ml-generic-purpose')
         bucket = client.bucket('ml-generic-purpose-tf-models')
         prefix = save_dir.stem
         for p in save_dir.iterdir():
@@ -55,14 +55,20 @@ def load(save_dir: Union[str, Path], **kwargs) -> EfficientDet:
     save_dir_url = urlparse(str(save_dir))
 
     if save_dir_url.scheme == 'gs':
-        save_dir = Path(Path.home(), '.effdet-checkpoints', save_dir_url.path)
+        save_dir = Path.home() / '.effdet-checkpoints' / save_dir_url.path[1:]
         save_dir.mkdir(exist_ok=True, parents=True)
+        auth.credentials.AnonymousCredentials()
+        client = storage.Client(
+            project='ml-generic-purpose',
+            credentials=auth.credentials.AnonymousCredentials())
+        bucket = client.bucket('ml-generic-purpose-tf-models')
 
-        client = storage.Client()
-        bucket = client.bucket()
-        blobs = bucket.list_blobs(prefix=save_dir_url.path)
+        prefix = save_dir_url.path[1:] + '/'
+        blobs = bucket.list_blobs(prefix=prefix)
+
         for blob in blobs:
-            blob.download_to_filename(save_dir / blob.name)
+            fname = save_dir / blob.name.replace(prefix, '')
+            blob.download_to_filename(fname)
     else:
         save_dir = Path(save_dir)
 

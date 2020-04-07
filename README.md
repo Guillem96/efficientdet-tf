@@ -55,8 +55,8 @@ $ git clone https://github.com/Guillem96/efficientdet-tf.git
 
 ```
 $ cd efficientdet-tf
-$ python setup.py build_ext --inplace
-$ python setup.py install
+$ pip install numpy cython
+$ pip install -U .
 ```
 
 3. Done 
