@@ -18,7 +18,6 @@ import numpy as np
 import tensorflow as tf
 
 from . import bndbox
-from . import compute_overlap as iou
 
 
 class AnchorGenerator(object):
@@ -83,7 +82,7 @@ class AnchorGenerator(object):
         K = shifts.shape[0]
     
         all_anchors = (tf.reshape(self.anchors, [1, A, 4]) 
-                       + tf.cast(tf.reshape(shifts, [K, 1, 4]), tf.float64))
+                       + tf.cast(tf.reshape(shifts, [K, 1, 4]), tf.float32))
         all_anchors = tf.reshape(all_anchors, [K * A, 4])
 
         return all_anchors
@@ -110,12 +109,22 @@ class AnchorGenerator(object):
         anchors[:, 0::2] -= np.tile(anchors[:, 2] * 0.5, (2, 1)).T
         anchors[:, 1::2] -= np.tile(anchors[:, 3] * 0.5, (2, 1)).T
 
-        return tf.constant(anchors)
+        return tf.constant(anchors, dtype=tf.float32)
 
     def __len__(self):
         return len(self.aspect_ratios) * len(self.anchor_scales)
 
 
+@tf.function(
+    input_signature=[tf.TensorSpec(shape=[None, 4], dtype=tf.float32),
+                     tf.TensorSpec(shape=[None, None, None, 3], dtype=tf.float32),
+                     tf.TensorSpec(shape=[None, None, 4], dtype=tf.float32),
+                     tf.TensorSpec(shape=[None, None], dtype=tf.int32),
+                     tf.TensorSpec(shape=None, dtype=tf.int32),
+                     tf.TensorSpec(shape=None, dtype=tf.int32),
+                     tf.TensorSpec(shape=None, dtype=tf.float32),
+                     tf.TensorSpec(shape=None, dtype=tf.float32)]
+)
 def anchor_targets_bbox(anchors: tf.Tensor,
                         images: tf.Tensor,
                         bndboxes: tf.Tensor,
@@ -164,8 +173,12 @@ def anchor_targets_bbox(anchors: tf.Tensor,
             define regression targets for (x1, y1, x2, y2) and the
             last column defines anchor states (-1 for ignore, 0 for bg, 1 for fg).
     """
-    batch_size = images.shape[0]
-    n_anchors = anchors.shape[0]
+    im_shape = tf.shape(images)
+    batch_size = im_shape[0]
+    h = tf.cast(im_shape[1], tf.float32)
+    w = tf.cast(im_shape[2], tf.float32) 
+
+    n_anchors = tf.shape(anchors)[0]
 
     result = compute_gt_annotations(anchors, 
                                     bndboxes,
@@ -186,18 +199,19 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     # Expand ignore indices with out of image anchors
     x_anchor_centre = (anchors[:, 0] + anchors[:, 2]) / 2.
     y_anchor_centre = (anchors[:, 1] + anchors[:, 3]) / 2.
-    out_x = tf.greater_equal(x_anchor_centre, images.shape[2])
-    out_y = tf.greater_equal(y_anchor_centre, images.shape[1])
+
+    out_x = tf.greater_equal(x_anchor_centre, w)
+    out_y = tf.greater_equal(y_anchor_centre, h)
     out_mask = tf.logical_or(out_x, out_y)
     ignore_indices = tf.logical_or(ignore_indices, out_mask)
 
     # Labels per anchor 
     # if is positive index add the class, else 0
     # To ignore the label add -1
-    labels_per_anchor = tf.where(positive_indices, chose_labels, 0)
+    labels_per_anchor = tf.where(positive_indices, chose_labels, -1)
     labels_per_anchor = tf.where(ignore_indices, -1, labels_per_anchor)
     labels_per_anchor = tf.one_hot(labels_per_anchor, 
-                                   axis=-1, depth=num_classes, off_value=0)
+                                   axis=-1, depth=num_classes)
     labels_per_anchor = tf.cast(labels_per_anchor, tf.float32)
 
     # Add regression for each anchor
@@ -209,7 +223,7 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     # Generate extra label to add the state of the label. 
     # (It should be ignored?)
     indices = tf.cast(positive_indices, tf.float32)
-    indices = tf.where(ignore_indices, -1, indices)
+    indices = tf.where(ignore_indices, -1., indices)
     indices = tf.expand_dims(indices, -1)
 
     labels_per_anchor = tf.concat([labels_per_anchor, indices], axis=-1)
@@ -248,13 +262,14 @@ def compute_gt_annotations(anchors: tf.Tensor,
         ignore_indices: indices of ignored anchors
         argmax_overlaps_inds: ordered overlaps indices
     """
-    batch_size = annotations.shape[0]
-    
+    batch_size = tf.shape(annotations)[0]
+    n_anchors = tf.shape(anchors)[0]
+
     # Cast and reshape inputs to expected values
     anchors = tf.expand_dims(anchors, 0)
-    anchors = tf.cast(anchors, tf.float64)
+    anchors = tf.cast(anchors, tf.float32)
     anchors = tf.tile(anchors, [batch_size, 1, 1])
-    annotations = tf.cast(annotations, tf.float64)
+    annotations = tf.cast(annotations, tf.float32)
 
     # Compute the ious between boxes, and get the argmax indices and max values
     overlaps = bndbox.bbox_overlap(anchors, annotations)
@@ -262,7 +277,7 @@ def compute_gt_annotations(anchors: tf.Tensor,
     max_overlaps = tf.reduce_max(overlaps, axis=-1)
 
     # Generate index like [batch_idx, max_overlap]
-    batched_indices = tf.ones([batch_size, anchors.shape[1]], dtype=tf.int32) 
+    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32) 
     batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 
                                   batched_indices)
     batched_indices = tf.reshape(batched_indices, [-1, 1])

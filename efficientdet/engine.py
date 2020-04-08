@@ -55,7 +55,7 @@ def train_single_epoch(model: tf.keras.Model,
     running_reg_loss = tf.metrics.Mean()
 
     for i, (images, (labels, bbs)) in enumerate(dataset):
-        
+
         target_reg, target_clf = utils.anchors.anchor_targets_bbox(
             anchors, images, bbs, labels, num_classes)
 

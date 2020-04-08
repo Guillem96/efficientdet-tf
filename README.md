@@ -206,7 +206,8 @@ for im_boxes, im_labels in zip(boxes, labels):
 
 The road map is ordered by priority. Depending on my feelings this can go up and down, so don't take it as somthing that will be done immediately.
 
-- [ ] Migrate anchors code to Tensorflow
+- [x] Migrate anchors code to Tensorflow
+- [ ] Define as many tf.functions as possible
 - [ ] Define COCO input pipeline using `tf.data`
 - [ ] Distribute training over multiple GPUs
 - [x] Learning rate schedulers to speed up and enhance training
