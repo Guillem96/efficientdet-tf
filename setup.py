@@ -14,44 +14,6 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 with open(path.join(here, 'requirements.txt')) as f:
     requires = [r for r in f.readlines() if not r.startswith('#')]
 
-class BuildExtension(Command):
-    description     = DistUtilsBuildExt.description
-    user_options    = DistUtilsBuildExt.user_options
-    boolean_options = DistUtilsBuildExt.boolean_options
-    help_options    = DistUtilsBuildExt.help_options
-
-    def __init__(self, *args, **kwargs):
-        from setuptools.command.build_ext import build_ext as SetupToolsBuildExt
-
-        # Bypass __setatrr__ to avoid infinite recursion.
-        self.__dict__['_command'] = SetupToolsBuildExt(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._command, name)
-
-    def __setattr__(self, name, value):
-        setattr(self._command, name, value)
-
-    def initialize_options(self, *args, **kwargs):
-        return self._command.initialize_options(*args, **kwargs)
-
-    def finalize_options(self, *args, **kwargs):
-        ret = self._command.finalize_options(*args, **kwargs)
-        import numpy
-        self.include_dirs.append(numpy.get_include())
-        return ret
-
-    def run(self, *args, **kwargs):
-        return self._command.run(*args, **kwargs)
-
-
-extensions = [
-    Extension(
-        'efficientdet.utils.compute_overlap',
-        ['efficientdet/utils/compute_overlap.pyx']
-    ),
-]
-
 setup(
     name='efficientdet',
 
@@ -64,8 +26,6 @@ setup(
 
     author='Guillem96 - Guillem Orellana Trullols',
     author_email='guillem.orellana@gmail.com', 
-
-    cmdclass={'build_ext': BuildExtension},
 
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -86,7 +46,6 @@ setup(
     python_requires='>=3.6',
 
     install_requires=requires,
-    ext_modules=extensions,
     # TODO: Entrypoint to train and evaluate
     project_urls={ 
         'Source': 'https://github.com/Guillem96/efficientdet-tf',

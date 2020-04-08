@@ -3,6 +3,7 @@ import unittest
 import cv2
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 import efficientdet.utils as utils
 import efficientdet.data.voc as voc
@@ -46,8 +47,8 @@ class AnchorsTest(unittest.TestCase):
                           (box[0], box[1]), 
                           (box[2], box[3]), (0, 255, 0), 1)
 
-        cv2.imshow('', im_random)
-        cv2.waitKey()
+        plt.imshow(im_random)
+        plt.show(block=True)
 
     def test_compute_gt(self):
         level = 3
@@ -59,13 +60,10 @@ class AnchorsTest(unittest.TestCase):
         
         for im, (l, bbs) in ds.take(1):
 
-            gt_reg, gt_labels = \
-                utils.anchors.anchor_targets_bbox(anchors.numpy(), 
-                                                  im.numpy(), 
-                                                  bbs.numpy(), l.numpy(), 
-                                                  len(voc.IDX_2_LABEL))
+            gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
+                anchors, im, bbs, l, len(voc.IDX_2_LABEL))
+
             nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
-            
             im_random = im[0].numpy()
             for box in nearest_anchors:
                 box = box.astype('int32')
@@ -82,8 +80,8 @@ class AnchorsTest(unittest.TestCase):
             for label in l[0]:
                 print(voc.IDX_2_LABEL[int(label)])
 
-            cv2.imshow('', im_random)
-            cv2.waitKey()
+            plt.imshow(im_random)
+            plt.show(block=True)
 
             print('GT shapes:', gt_labels.shape, gt_reg.shape)
             print('Found any overlapping anchor?', 
@@ -96,18 +94,16 @@ class AnchorsTest(unittest.TestCase):
         ds = voc.build_dataset('test/data/VOC2007',
                                im_input_size=(512, 512))
 
-        anchors = self.generate_anchors(config.AnchorsConfig(), 
-                                        512)
+        anchors = self.generate_anchors(config.AnchorsConfig(), 512)
         
         for im, (l, bbs) in ds.take(1):
             
-            gt_reg, gt_labels = \
-                utils.anchors.anchor_targets_bbox(anchors.numpy(), 
-                                                  im.numpy(), 
-                                                  bbs.numpy(), l.numpy(), 
-                                                  len(voc.IDX_2_LABEL))
+            gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
+                anchors, im, bbs, l, len(voc.IDX_2_LABEL))
+
             near_mask = gt_reg[0, :, -1] == 1
-            nearest_regressors = tf.expand_dims(gt_reg[0, near_mask][:, :-1], 0)
+            nearest_regressors = tf.expand_dims(
+                tf.boolean_mask(gt_reg[0], near_mask)[:, :-1], 0)
             nearest_anchors = tf.expand_dims(anchors[near_mask], 0)
 
             # apply regression to boxes
@@ -121,8 +117,8 @@ class AnchorsTest(unittest.TestCase):
                               (box[0], box[1]), 
                               (box[2], box[3]), (0, 255, 0), 1)
             
-            cv2.imshow('', im_random)
-            cv2.waitKey()
+            plt.imshow(im_random)
+            plt.show(block=True)
 
 
 if __name__ == "__main__":

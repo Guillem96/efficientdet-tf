@@ -203,3 +203,57 @@ def nms(boxes: tf.Tensor,
             all_scores.append(tf.constant([]))
 
     return all_boxes, all_labels, all_scores
+
+
+
+def bbox_overlap(boxes, gt_boxes):
+    """
+    Calculates the overlap between proposal and ground truth boxes.
+    Some `gt_boxes` may have been padded. The returned `iou` tensor for these
+    boxes will be -1.
+    
+    Parameters
+    ----------
+    boxes: tf.Tensor with a shape of [batch_size, N, 4]. 
+        N is the number of proposals before groundtruth assignment. The
+        last dimension is the pixel coordinates in [xmin, ymin, xmax, ymax] form.
+    gt_boxes: tf.Tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4]. 
+        This tensor might have paddings with a negative value.
+    
+    Returns
+    -------
+    tf.FloatTensor 
+        A tensor with as a shape of [batch_size, N, MAX_NUM_INSTANCES].
+    """
+    bb_x_min, bb_y_min, bb_x_max, bb_y_max = tf.split(
+        value=boxes, num_or_size_splits=4, axis=2)
+    gt_x_min, gt_y_min, gt_x_max, gt_y_max = tf.split(
+        value=gt_boxes, num_or_size_splits=4, axis=2)
+
+    # Calculates the intersection area.
+    i_xmin = tf.math.maximum(bb_x_min, tf.transpose(gt_x_min, [0, 2, 1]))
+    i_xmax = tf.math.minimum(bb_x_max, tf.transpose(gt_x_max, [0, 2, 1]))
+    i_ymin = tf.math.maximum(bb_y_min, tf.transpose(gt_y_min, [0, 2, 1]))
+    i_ymax = tf.math.minimum(bb_y_max, tf.transpose(gt_y_max, [0, 2, 1]))
+    i_area = (tf.math.maximum(i_xmax - i_xmin, 0) * 
+              tf.math.maximum(i_ymax - i_ymin, 0))
+
+    # Calculates the union area.
+    bb_area = (bb_y_max - bb_y_min) * (bb_x_max - bb_x_min)
+    gt_area = (gt_y_max - gt_y_min) * (gt_x_max - gt_x_min)
+    
+    # Adds a small epsilon to avoid divide-by-zero.
+    u_area = bb_area + tf.transpose(gt_area, [0, 2, 1]) - i_area + 1e-8
+
+    # Calculates IoU.
+    iou = i_area / u_area
+
+    # Fills -1 for IoU entries between the padded ground truth boxes.
+    gt_invalid_mask = tf.less(
+        tf.reduce_max(gt_boxes, axis=-1, keepdims=True), 0.0)
+    padding_mask = tf.logical_or(
+        tf.zeros_like(bb_x_min, dtype=tf.bool),
+        tf.transpose(gt_invalid_mask, [0, 2, 1]))
+    iou = tf.where(padding_mask, -tf.ones_like(iou), iou)
+
+    return iou

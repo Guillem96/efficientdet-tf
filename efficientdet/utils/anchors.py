@@ -14,9 +14,10 @@ limitations under the License.
 import math
 from typing import List, Union, Tuple, Sequence
 
+import numpy as np
 import tensorflow as tf
-import numpy as np # TODO: Migrate to tf
 
+from . import bndbox
 from . import compute_overlap as iou
 
 
@@ -109,33 +110,33 @@ class AnchorGenerator(object):
         anchors[:, 0::2] -= np.tile(anchors[:, 2] * 0.5, (2, 1)).T
         anchors[:, 1::2] -= np.tile(anchors[:, 3] * 0.5, (2, 1)).T
 
-        return anchors
+        return tf.constant(anchors)
 
     def __len__(self):
         return len(self.aspect_ratios) * len(self.anchor_scales)
 
 
-def anchor_targets_bbox(anchors: np.ndarray,
-                        images: np.ndarray,
-                        bndboxes: np.ndarray,
-                        labels: np.ndarray,
+def anchor_targets_bbox(anchors: tf.Tensor,
+                        images: tf.Tensor,
+                        bndboxes: tf.Tensor,
+                        labels: tf.Tensor,
                         num_classes: int,
                         padding_value: int = -1,
                         negative_overlap: float = 0.4,
-                        positive_overlap: float = 0.5) -> Tuple[np.ndarray,
-                                                                np.ndarray]:
+                        positive_overlap: float = 0.5) -> Tuple[tf.Tensor,
+                                                                tf.Tensor]:
     """ 
     Generate anchor targets for bbox detection.
 
     Parameters
     ----------
-    anchors: np.ndarray 
+    anchors: tf.Tensor 
         Annotations of shape (N, 4) for (x1, y1, x2, y2).
-    images: np.ndarray
+    images: tf.Tensor
         Array of shape [BATCH, H, W, C] containing images.
-    bndboxes: np.ndarray
+    bndboxes: tf.Tensor
         Array of shape [BATCH, N, 4] contaning ground truth boxes
-    labels: np.ndarray
+    labels: tf.Tensor
         Array of shape [BATCH, N] containing the labels for each box
     num_classes: int
         Number of classes to predict.
@@ -147,155 +148,168 @@ def anchor_targets_bbox(anchors: np.ndarray,
         (all anchors with overlap > positive_overlap are positive).
     padding_value: int
         Value used to pad labels
+        
     Returns
     --------
-    Tuple[np.ndarray, np.ndarray]
+    Tuple[tf.Tensor, tf.Tensor]
         labels_batch: 
             batch that contains labels & anchor states 
-            (np.array of shape (batch_size, N, num_classes + 1),
+            (tf.Tensor of shape (batch_size, N, num_classes + 1),
             where N is the number of anchors for an image and the last 
             column defines the anchor state (-1 for ignore, 0 for bg, 1 for fg).
         regression_batch: 
             batch that contains bounding-box regression targets for an 
-            image & anchor states (np.array of shape (batch_size, N, 4 + 1),
+            image & anchor states (tf.Tensor of shape (batch_size, N, 4 + 1),
             where N is the number of anchors for an image, the first 4 columns 
             define regression targets for (x1, y1, x2, y2) and the
             last column defines anchor states (-1 for ignore, 0 for bg, 1 for fg).
     """
     batch_size = images.shape[0]
+    n_anchors = anchors.shape[0]
 
-    regression_batch = np.zeros((batch_size, anchors.shape[0], 4 + 1))
-    labels_batch = np.zeros((batch_size, anchors.shape[0], num_classes + 1))
+    result = compute_gt_annotations(anchors, 
+                                    bndboxes,
+                                    negative_overlap, 
+                                    positive_overlap)
+    positive_indices, ignore_indices, argmax_overlaps_inds = result
 
-    # compute labels and regression targets
-    for batch_idx, (image, bboxes, label) in enumerate(zip(images, bndboxes, labels)):
-        if bboxes.shape[0]:
-            # obtain indices of gt annotations with the greatest overlap
-            result = compute_gt_annotations(anchors,
-                                            bboxes,
-                                            negative_overlap, 
-                                            positive_overlap)
-            positive_indices, ignore_indices, argmax_overlaps_inds = result
-            
-            # If any anchor overlaps with padding box
-            padding_indices = label[argmax_overlaps_inds] == padding_value
-            
-            positive_indices = positive_indices & ~padding_indices
-            ignore_indices = ignore_indices | padding_indices
+    # Add padded instances to ignore indices
+    chose_labels = tf.gather_nd(labels, argmax_overlaps_inds)
+    chose_labels = tf.reshape(chose_labels, [batch_size, -1])
+    no_padding_mask = tf.not_equal(chose_labels, padding_value)
+    # Remove from positive the paddings
+    positive_indices = tf.logical_and(positive_indices, no_padding_mask)
+    # Add padded instances to ignore instances
+    ignore_indices = tf.logical_or(ignore_indices, 
+                                   tf.logical_not(no_padding_mask))
+    
+    # Expand ignore indices with out of image anchors
+    x_anchor_centre = (anchors[:, 0] + anchors[:, 2]) / 2.
+    y_anchor_centre = (anchors[:, 1] + anchors[:, 3]) / 2.
+    out_x = tf.greater_equal(x_anchor_centre, images.shape[2])
+    out_y = tf.greater_equal(y_anchor_centre, images.shape[1])
+    out_mask = tf.logical_or(out_x, out_y)
+    ignore_indices = tf.logical_or(ignore_indices, out_mask)
 
-            labels_batch[batch_idx, ignore_indices, -1] = -1 # Ignore
-            labels_batch[batch_idx, positive_indices, -1] = 1 # Foreground
+    # Labels per anchor 
+    # if is positive index add the class, else 0
+    # To ignore the label add -1
+    labels_per_anchor = tf.where(positive_indices, chose_labels, 0)
+    labels_per_anchor = tf.where(ignore_indices, -1, labels_per_anchor)
+    labels_per_anchor = tf.one_hot(labels_per_anchor, 
+                                   axis=-1, depth=num_classes, off_value=0)
+    labels_per_anchor = tf.cast(labels_per_anchor, tf.float32)
 
-            regression_batch[batch_idx, ignore_indices, -1] = -1 # Ignore
-            regression_batch[batch_idx, positive_indices, -1] = 1 # Foreground
+    # Add regression for each anchor
+    chose_bndboxes = tf.gather_nd(bndboxes, argmax_overlaps_inds)
+    chose_bndboxes = tf.reshape(chose_bndboxes, [batch_size, -1, 4])
+    regression_per_anchor = tf.zeros([batch_size, n_anchors, 4])
+    regression_per_anchor = bbox_transform(anchors, chose_bndboxes)
+    
+    # Generate extra label to add the state of the label. 
+    # (It should be ignored?)
+    indices = tf.cast(positive_indices, tf.float32)
+    indices = tf.where(ignore_indices, -1, indices)
+    indices = tf.expand_dims(indices, -1)
 
-            # compute target class labels
-            labels_batch[batch_idx, 
-                         positive_indices,
-                         label[argmax_overlaps_inds[positive_indices]]] = 1
+    labels_per_anchor = tf.concat([labels_per_anchor, indices], axis=-1)
+    regression_per_anchor = tf.concat(
+        [regression_per_anchor, indices], axis=-1)
 
-            regression_batch[batch_idx, :, :-1] = \
-                bbox_transform(anchors, 
-                               bboxes[argmax_overlaps_inds])
-
-        # ignore annotations outside of image
-        if image.shape:
-            anchors_centers = np.vstack([(anchors[:, 0] + anchors[:, 2]) / 2, 
-                                         (anchors[:, 1] + anchors[:, 3]) / 2]).T
-            indices = np.logical_or(anchors_centers[:, 0] >= image.shape[1], 
-                                    anchors_centers[:, 1] >= image.shape[0])
-
-            labels_batch[batch_idx, indices, -1] = -1
-            regression_batch[batch_idx, indices, -1] = -1
-
-    return regression_batch, labels_batch
+    return regression_per_anchor, labels_per_anchor
 
 
-def compute_gt_annotations(anchors: np.ndarray,
-                           annotations: np.ndarray,
+def compute_gt_annotations(anchors: tf.Tensor,
+                           annotations: tf.Tensor,
                            negative_overlap=0.4,
-                           positive_overlap=0.5) -> Tuple[np.ndarray,
-                                                          np.ndarray,
-                                                          np.ndarray]:
+                           positive_overlap=0.5) -> Tuple[tf.Tensor,
+                                                          tf.Tensor,
+                                                          tf.Tensor]:
     """ 
     Obtain indices of gt annotations with the greatest overlap.
     
     Parameters
     ----------
-        anchors: np.array
-            Annotations of shape [N, 4] for (x1, y1, x2, y2).
-        annotations: np.array 
-            shape [N, 5] for (x1, y1, x2, y2).
-        negative_overlap: float, default 0.4
-            IoU overlap for negative anchors 
-            (all anchors with overlap < negative_overlap are negative).
-        positive_overlap: float, default 0.5
-            IoU overlap or positive anchors 
-            (all anchors with overlap > positive_overlap are positive).
+    anchors: tf.Tensor
+        Annotations of shape [N, 4] for (x1, y1, x2, y2).
+    annotations: tf.Tensor 
+        shape [BATCH, N, 4] for (x1, y1, x2, y2).
+    negative_overlap: float, default 0.4
+        IoU overlap for negative anchors 
+        (all anchors with overlap < negative_overlap are negative).
+    positive_overlap: float, default 0.5
+        IoU overlap or positive anchors 
+        (all anchors with overlap > positive_overlap are positive).
 
     Returns
     -------
-    Tuple[np.ndarray, np.ndarray, np.ndarray]
+    Tuple[tf.Tensor, tf.Tensor, np.ndarray]
         positive_indices: indices of positive anchors
         ignore_indices: indices of ignored anchors
         argmax_overlaps_inds: ordered overlaps indices
     """
+    batch_size = annotations.shape[0]
+    
+    # Cast and reshape inputs to expected values
+    anchors = tf.expand_dims(anchors, 0)
+    anchors = tf.cast(anchors, tf.float64)
+    anchors = tf.tile(anchors, [batch_size, 1, 1])
+    annotations = tf.cast(annotations, tf.float64)
 
-    overlaps = iou.compute_overlap(anchors.astype(np.float64), 
-                                   annotations.astype(np.float64))
-    argmax_overlaps_inds = np.argmax(overlaps, axis=1)
-    max_overlaps = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
-    max_overlap_boxes = annotations[argmax_overlaps_inds]
+    # Compute the ious between boxes, and get the argmax indices and max values
+    overlaps = bndbox.bbox_overlap(anchors, annotations)
+    argmax_overlaps_inds = tf.argmax(overlaps, axis=-1, output_type=tf.int32)
+    max_overlaps = tf.reduce_max(overlaps, axis=-1)
+
+    # Generate index like [batch_idx, max_overlap]
+    batched_indices = tf.ones([batch_size, anchors.shape[1]], dtype=tf.int32) 
+    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 
+                                  batched_indices)
+    batched_indices = tf.reshape(batched_indices, [-1, 1])
+    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])
+    batched_indices = tf.concat([batched_indices, argmax_inds], -1)
+    max_overlap_boxes = tf.gather_nd(anchors, batched_indices)
+    max_overlap_boxes = tf.reshape(max_overlap_boxes, [batch_size, -1, 4])
 
     # Compute areas of boxes so we can ignore 'ridiculous' sized boxes
-    widths = (max_overlap_boxes[:, 2] - max_overlap_boxes[:, 0])
-    heights = (max_overlap_boxes[:, 3] - max_overlap_boxes[:, 1])
+    widths = (max_overlap_boxes[..., 2] - max_overlap_boxes[..., 0])
+    heights = (max_overlap_boxes[..., 3] - max_overlap_boxes[..., 1])
     areas = widths * heights
-    small_areas = areas < 1.
+    small_areas = tf.less(areas, 1.)
+    large_areas = tf.logical_not(small_areas)
 
-    # assign "dont care" labels
-    positive_indices = (max_overlaps >= positive_overlap) & ~small_areas
-    ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
-    ignore_indices = ignore_indices | small_areas
+    # Assign positive indices. 
+    positive_indices = tf.greater_equal(max_overlaps, positive_overlap) 
+    positive_indices = tf.logical_and(positive_indices, large_areas)
+    
+    # Assign ignored boxes
+    ignore_indices = tf.greater(max_overlaps, negative_overlap)
+    ignore_indices = tf.logical_and(ignore_indices, 
+                                    tf.logical_not(positive_indices))
+    ignore_indices = tf.logical_or(ignore_indices, small_areas)
 
-    return positive_indices, ignore_indices, argmax_overlaps_inds
+    return positive_indices, ignore_indices, batched_indices
 
 
-_ListOfInt = List[int]
-_TupleOfInt = Tuple[int, int, int, int]
-_MeanStd = Union[np.ndarray, _ListOfInt, _TupleOfInt]
-
-def bbox_transform(anchors: np.ndarray, 
-                   gt_boxes: np.ndarray, 
-                   mean: _MeanStd = None, 
-                   std: _MeanStd = None) -> np.ndarray:
+def bbox_transform(anchors: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     """Compute bounding-box regression targets for an image."""
 
-    if mean is None:
-        mean = np.array([0, 0, 0, 0])
-    if std is None:
-        std = np.array([0.2, 0.2, 0.2, 0.2])
+    mean = tf.constant([0., 0., 0., 0.])
+    std = np.array([0.2, 0.2, 0.2, 0.2])
 
-    if isinstance(mean, (list, tuple)):
-        mean = np.array(mean)
-    elif not isinstance(mean, np.ndarray):
-        raise ValueError('Expected mean to be a np.ndarray, list or tuple. Received: {}'.format(type(mean)))
+    anchors = tf.cast(anchors, tf.float32)
+    gt_boxes = tf.cast(gt_boxes, tf.float32)
 
-    if isinstance(std, (list, tuple)):
-        std = np.array(std)
-    elif not isinstance(std, np.ndarray):
-        raise ValueError('Expected std to be a np.ndarray, list or tuple. Received: {}'.format(type(std)))
+    anchor_widths  = anchors[..., 2] - anchors[..., 0]
+    anchor_heights = anchors[..., 3] - anchors[..., 1]
 
-    anchor_widths  = anchors[:, 2] - anchors[:, 0]
-    anchor_heights = anchors[:, 3] - anchors[:, 1]
+    targets_dx1 = (gt_boxes[..., 0] - anchors[..., 0]) / anchor_widths
+    targets_dy1 = (gt_boxes[..., 1] - anchors[..., 1]) / anchor_heights
+    targets_dx2 = (gt_boxes[..., 2] - anchors[..., 2]) / anchor_widths
+    targets_dy2 = (gt_boxes[..., 3] - anchors[..., 3]) / anchor_heights
 
-    targets_dx1 = (gt_boxes[:, 0] - anchors[:, 0]) / anchor_widths
-    targets_dy1 = (gt_boxes[:, 1] - anchors[:, 1]) / anchor_heights
-    targets_dx2 = (gt_boxes[:, 2] - anchors[:, 2]) / anchor_widths
-    targets_dy2 = (gt_boxes[:, 3] - anchors[:, 3]) / anchor_heights
-
-    targets = np.stack((targets_dx1, targets_dy1, targets_dx2, targets_dy2))
-    targets = targets.T
+    targets = tf.stack(
+        [targets_dx1, targets_dy1, targets_dx2, targets_dy2], axis=-1)
 
     targets = (targets - mean) / std
 
