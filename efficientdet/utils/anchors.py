@@ -276,32 +276,13 @@ def compute_gt_annotations(anchors: tf.Tensor,
     argmax_overlaps_inds = tf.argmax(overlaps, axis=-1, output_type=tf.int32)
     max_overlaps = tf.reduce_max(overlaps, axis=-1)
 
-    # Generate index like [batch_idx, max_overlap]
-    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32) 
-    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 
-                                  batched_indices)
-    batched_indices = tf.reshape(batched_indices, [-1, 1])
-    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])
-    batched_indices = tf.concat([batched_indices, argmax_inds], -1)
-    max_overlap_boxes = tf.gather_nd(anchors, batched_indices)
-    max_overlap_boxes = tf.reshape(max_overlap_boxes, [batch_size, -1, 4])
-
-    # Compute areas of boxes so we can ignore 'ridiculous' sized boxes
-    widths = (max_overlap_boxes[..., 2] - max_overlap_boxes[..., 0])
-    heights = (max_overlap_boxes[..., 3] - max_overlap_boxes[..., 1])
-    areas = widths * heights
-    small_areas = tf.less(areas, 1.)
-    large_areas = tf.logical_not(small_areas)
-
     # Assign positive indices. 
     positive_indices = tf.greater_equal(max_overlaps, positive_overlap) 
-    positive_indices = tf.logical_and(positive_indices, large_areas)
     
     # Assign ignored boxes
     ignore_indices = tf.greater(max_overlaps, negative_overlap)
     ignore_indices = tf.logical_and(ignore_indices, 
                                     tf.logical_not(positive_indices))
-    ignore_indices = tf.logical_or(ignore_indices, small_areas)
 
     return positive_indices, ignore_indices, batched_indices
 
