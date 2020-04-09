@@ -275,6 +275,14 @@ def compute_gt_annotations(anchors: tf.Tensor,
     overlaps = bndbox.bbox_overlap(anchors, annotations)
     argmax_overlaps_inds = tf.argmax(overlaps, axis=-1, output_type=tf.int32)
     max_overlaps = tf.reduce_max(overlaps, axis=-1)
+    
+    # Generate index like [batch_idx, max_overlap]	
+    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32) 	
+    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 	
+                                  batched_indices)	
+    batched_indices = tf.reshape(batched_indices, [-1, 1])	
+    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])	
+    batched_indices = tf.concat([batched_indices, argmax_inds], -1)	
 
     # Assign positive indices. 
     positive_indices = tf.greater_equal(max_overlaps, positive_overlap) 
