@@ -1,4 +1,6 @@
 import json
+import base64
+import hashlib
 from pathlib import Path
 from typing import Union
 from urllib.parse import urlparse
@@ -8,6 +10,14 @@ import tensorflow as tf
 from google import auth
 from google.cloud import storage
 from .models import EfficientDet
+
+
+def _md5(fname):
+    hash_md5 = hashlib.md5()
+    with open(str(fname), "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return base64.b64encode(hash_md5.digest()).decode()
 
 
 def save(model: EfficientDet,
@@ -63,7 +73,6 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
         save_dir = Path.home() / '.effdet-checkpoints'
         save_dir.mkdir(exist_ok=True, parents=True)
         
-        auth.credentials.AnonymousCredentials()
         client = storage.Client(
             project='ml-generic-purpose',
             credentials=auth.credentials.AnonymousCredentials())
@@ -72,12 +81,20 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
         prefix = save_dir_url.path[1:] + '/'
         blobs = bucket.list_blobs(prefix=prefix)
 
-        for blob in blobs:
-            fname = save_dir / blob.name.replace(prefix, '')
-            blob.download_to_filename(fname)
-        
         hp_fname = save_dir / 'hp.json'
         model_path = save_dir / 'model.tf'
+
+        hp_blob = bucket.blob(prefix + 'hp.json')
+        hp_blob.reload()
+
+        if hp_fname.exists() and _md5(hp_fname) != hp_blob.md5_hash:
+            for blob in blobs:
+                fname = save_dir / blob.name.replace(prefix, '')
+                blob.download_to_filename(fname)
+        elif not hp_fname.exists():
+            for blob in blobs:
+                fname = save_dir / blob.name.replace(prefix, '')
+                blob.download_to_filename(fname)
     else:
         hp_fname = Path(save_dir_or_url) / 'hp.json'
         model_path = Path(save_dir_or_url) / 'model.tf'
