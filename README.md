@@ -7,38 +7,20 @@ tensorflow 2.
 
 ![Cat example](imgs/voc2007_1.png)
 
-## Pretrained weights
+## Table of contents
 
-![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
+- [Installation 💿](#Installation)
+- [Training The model 🧠](#Training the model)
+- [Evaluate a model ✅](#Evaluate a model)
+- [Using a trained model 🎯](#Using a trained model)
 
-How to use pretrained models:
+## Installation
 
-1. Choose your favourite badge. For example: ![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
-2. Load the model referencing the badge (use the white and blue text) as shown below.
-
-```python
-from efficientdet import EfficientDet
-
-badge_name = 'D0-VOC'
-# With pretrained classifiaction head
-model = EfficientDet.from_pretrained(badge_name)
-
-# With custom head
-# Note: This will initialize a random classifier head, so it requires
-# fine tuning
-model = EfficientDet.from_pretrained(chckp_path, 
-                                     num_classes=<your_n_classes>)
-```
-
-Transfer learning using the CLI.
+Just run `pip install`.
 
 ```
-$ python -m efficientdet.train *usual-parameters* \
-  --from-pretrained <badge_reference> # For example, D0-VOC
+$pip install git+https://github.com/Guillem96/efficientdet-tf
 ```
-
-This will automatically append a custom classification head to a pretrained model, and start training.
-
 
 ## Training the model
 
@@ -51,26 +33,7 @@ annotations outputs.
 
 You can specify the data model on the training command.
 
-
-## Installation
-
-1. Clone the project
-
-```
-$ git clone https://github.com/Guillem96/efficientdet-tf.git
-```
-
-2. Navigate inside the project and run the following commands
-
-```
-$ cd efficientdet-tf
-$ pip install numpy cython
-$ pip install -U .
-```
-
-3. Done 
-
-## Training Command Line Interface (CLI)
+### Training With Command Line Interface (CLI)
 
 ```
 $ python -m efficientdet.train --help
@@ -116,7 +79,7 @@ Options:
   --help                          Show this message and exit.
 ```
 
-## Train the model with labelme format
+### Train the model with labelme format
 
 The command below is the one that we should use if we want to train the model with
 the data coming from [here](https://github.com/Guillem96/efficientdet-tf/tree/master/test/data/pokemon).
@@ -142,7 +105,7 @@ $ python -m efficientdet.train \
     --save-dir models/pokemon-models/
 ```
 
-## Train the model with VOC 2007 format
+### Train the model with VOC 2007 format
 
 The command below is the one that we should use if we want to train the model with
 the data coming from [here](https://github.com/Guillem96/efficientdet-tf/tree/master/test/data/VOC2007).
@@ -201,6 +164,41 @@ for im_boxes, im_labels in zip(boxes, labels):
     # Process boxes of a specific image
     ...
 ```
+
+For more on how to use pretrained model see the inference example [here](examples/EfficientDet_TF_Example.ipynb) 📝.
+
+### Pretrained weights
+
+![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
+
+How to use pretrained models:
+
+1. Choose your favourite badge. For example: ![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
+2. Load the model referencing the badge (use the white and blue text) as shown below.
+
+```python
+from efficientdet import EfficientDet
+
+badge_name = 'D0-VOC'
+# With pretrained classifiaction head
+model = EfficientDet.from_pretrained(badge_name)
+
+# With custom head
+# Note: This will initialize a random classifier head, so it requires
+# fine tuning
+model = EfficientDet.from_pretrained(chckp_path, 
+                                     num_classes=<your_n_classes>)
+```
+
+Transfer learning using the CLI.
+
+```
+$ python -m efficientdet.train *usual-parameters* \
+  --from-pretrained <badge_reference> # For example, D0-VOC
+```
+
+This will automatically append a custom classification head to a pretrained model, and start training.
+
 
 ## Roadmap
 
