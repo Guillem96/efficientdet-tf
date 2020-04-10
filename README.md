@@ -10,9 +10,9 @@ tensorflow 2.
 ## Table of contents
 
 - [Installation 💿](#Installation)
-- [Training The model 🧠](#Training the model)
-- [Evaluate a model ✅](#Evaluate a model)
-- [Using a trained model 🎯](#Using a trained model)
+- [Training The model 🧠](#training-the-model)
+- [Evaluate a model ✅](#evaluate-a-model)
+- [Using a trained model 🎯](#using-a-trained-model)
 
 ## Installation
 
