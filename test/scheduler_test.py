@@ -16,10 +16,10 @@ class SchedulerTest(unittest.TestCase):
         alpha = 1e-2
 
         steps_per_epoch = 1024 
-        scheduler = optim.EfficientDetLRScheduler(
+        scheduler = optim.WarmupCosineDecayLRScheduler(
             max_lr,
-            epochs, 
-            steps_per_epoch, alpha=alpha)
+            steps_per_epoch, 
+            (steps_per_epoch * (epochs - 1)), alpha=alpha)
 
         lrs = [scheduler(i) for i in range(epochs * steps_per_epoch)]
         epoch_ends_at = [i * steps_per_epoch for i in range(epochs)]

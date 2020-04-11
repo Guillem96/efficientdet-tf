@@ -9,10 +9,13 @@ class Merge(tf.keras.layers.Layer):
         super(Merge, self).__init__()
 
         self.resize = layers.Resize(features)
-        self.conv = tf.keras.layers.Conv2D(features,
-                                           kernel_size=3,
-                                           strides=1,
-                                           padding='same')
+        self.conv = layers.ConvBlock(features,
+                                     kernel_size=3,
+                                     strides=1,
+                                     separable=False,
+                                     activation='swish',
+                                     padding='same')
+                                     
     def call(self, features: tf.Tensor, training=True):
         a, b = features
         b = self.resize(b, a.shape, training=training)

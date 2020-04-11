@@ -113,11 +113,12 @@ def train(**kwargs):
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
     
+    steps_per_epoch = (ds_len(ds) // kwargs['grad_accum_steps']) + 1
     if kwargs['w_scheduler']:
-        lr = efficientdet.optim.EfficientDetLRScheduler(
+        lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
             kwargs['learning_rate'],
-            kwargs['epochs'],
-            (ds_len(ds) // kwargs['grad_accum_steps']) + 1,
+            warmup_steps=steps_per_epoch,
+            decay_steps=steps_per_epoch * (kwargs['epochs'] - 1),
             alpha=kwargs['alpha'])
     else:
         lr = kwargs['learning_rate']

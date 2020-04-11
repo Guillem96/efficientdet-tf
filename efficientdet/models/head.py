@@ -14,7 +14,7 @@ class RetinaNetBBPredictor(tf.keras.Model):
         self.feature_extractors = [
             layers.ConvBlock(width, 
                              kernel_size=3,
-                             activation='relu',
+                             activation='swish',
                              padding='same')
             for _ in range(depth)]
 
@@ -44,7 +44,7 @@ class RetinaNetClassifier(tf.keras.Model):
         self.feature_extractors = [
             layers.ConvBlock(width, 
                              kernel_size=3,
-                             activation='relu',
+                             activation='swish',
                              padding='same')
             for _ in range(depth)]
         
