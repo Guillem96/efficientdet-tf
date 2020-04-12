@@ -11,18 +11,15 @@ import efficientdet
 @click.command()
 @click.option('--image', type=click.Path(dir_okay=False, exists=True))
 @click.option('--checkpoint', type=click.Path())
-@click.option('--score', type=float, default=.6)
+@click.option('--score', type=float, default=.4)
 
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
 
 def main(**kwargs):
 
-    # _, params = efficientdet.checkpoint.load(
-    #     kwargs['checkpoint'], score_threshold=kwargs['score'])
-
-    model = efficientdet.EfficientDet.from_pretrained('D0-VOC', 
-                                      score_threshold=.6)
+    model, params = efficientdet.checkpoint.load(
+        kwargs['checkpoint'], score_threshold=kwargs['score'])
 
     if kwargs['format'] == 'labelme':
         classes = params['classes_names'].split(',')
@@ -39,7 +36,7 @@ def main(**kwargs):
                                   training=False)
 
     labels = [classes[l] for l in labels[0]]
-
+    print(labels)
     im = im.numpy()
     for l, box, s in zip(labels, boxes[0].numpy(), scores[0]):
         x1, y1, x2, y2 = box.astype('int32')

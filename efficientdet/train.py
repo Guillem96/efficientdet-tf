@@ -108,7 +108,7 @@ def train(**kwargs):
             im_size=(model.config.input_size,) * 2,
             shuffle=False,
             data_augmentation=False,
-            batch_size=kwargs['batch_size'] // 2)
+            batch_size=min(1, kwargs['batch_size'] // 2))
 
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)

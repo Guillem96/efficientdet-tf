@@ -7,12 +7,12 @@ class Merge(tf.keras.layers.Layer):
 
     def __init__(self, features: int = 64):
         super(Merge, self).__init__()
-
+        
         self.resize = layers.Resize(features)
         self.conv = layers.ConvBlock(features,
                                      kernel_size=3,
                                      strides=1,
-                                     separable=False,
+                                     separable=True,
                                      activation='swish',
                                      padding='same')
                                      

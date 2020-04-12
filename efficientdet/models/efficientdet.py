@@ -30,7 +30,7 @@ class EfficientDet(tf.keras.Model):
                  D : int = 0, 
                  bidirectional: bool = True,
                  freeze_backbone: bool = False,
-                 score_threshold: float = .1,
+                 score_threshold: float = .01,
                  weights : str = 'imagenet'):
                  
         super(EfficientDet, self).__init__()
@@ -137,7 +137,9 @@ class EfficientDet(tf.keras.Model):
         EfficientDet
         """
         AVAILABLE_MODELS = {
-            'D0-VOC': 'gs://ml-generic-purpose-tf-models/D0-VOC'}
+            'D0-VOC': 'gs://ml-generic-purpose-tf-models/D0-VOC',
+            'D0-VOC-FPN': 'gs://ml-generic-purpose-tf-models/D0-VOC-FPN'
+        }
 
         # TODO: Make checkpoint path also a reference to a path.
         # For example: EfficientDet.from_pretrained('voc')        

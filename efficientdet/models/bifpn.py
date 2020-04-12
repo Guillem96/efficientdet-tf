@@ -18,12 +18,12 @@ class FastFusion(tf.keras.layers.Layer):
                              trainable=True)
         self.relu = tf.keras.layers.Activation('relu')
         
-        self.conv = layers.ConvBlock(separable=True,
+        self.conv = layers.ConvBlock(features,
+                                     separable=True,
                                      kernel_size=3, 
                                      strides=1, 
                                      padding='same', 
                                      activation='swish')
-        self.sum = tf.keras.layers.Add()
         self.resize = layers.Resize(features)
 
     def call(self, 
@@ -45,7 +45,7 @@ class FastFusion(tf.keras.layers.Layer):
 
         # [INPUTS, BATCH, H, W, C]
         weighted_inputs = tf.map_fn(lambda i: w[i] * inputs[i],
-                                    tf.range(self.size))
+                                    tf.range(self.size), dtype=tf.float32)
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
