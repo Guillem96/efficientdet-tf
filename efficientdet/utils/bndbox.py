@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple, List, Union
 
 import tensorflow as tf
@@ -122,10 +123,13 @@ def clip_boxes(boxes: tf.Tensor,
     # TODO: Document this
     h, w = im_size
 
-    x1 = tf.clip_by_value(boxes[:, :, 0], 0, w - 1)
-    y1 = tf.clip_by_value(boxes[:, :, 1], 0, h - 1)
-    x2 = tf.clip_by_value(boxes[:, :, 2], 0, w - 1)
-    y2 = tf.clip_by_value(boxes[:, :, 3], 0, h - 1)
+    h = tf.cast(h - 1, tf.float32)
+    w = tf.cast(w - 1, tf.float32)
+
+    x1 = tf.clip_by_value(boxes[:, :, 0], 0., w)
+    y1 = tf.clip_by_value(boxes[:, :, 1], 0., h)
+    x2 = tf.clip_by_value(boxes[:, :, 2], 0., w)
+    y2 = tf.clip_by_value(boxes[:, :, 3], 0., h)
 
     return tf.stack([x1, y1, x2, y2], axis=2)
 
@@ -154,12 +158,40 @@ def nms(boxes: tf.Tensor,
         labels: List[tf.Tensor of shape [N]]
         scores: List[tf.Tensor of shape [N]]
     """
+    def body(c, c_boxes, c_scores, c_labels, batch_idx):
+        nms_scores = tf.gather(class_scores[batch_idx], c, axis=-1)
+        nms_scores = tf.reshape(nms_scores, [-1])
+
+        indices = tf.image.non_max_suppression(
+                boxes[batch_idx],
+                nms_scores,
+                max_output_size=100,
+                iou_threshold=iou_threshold,
+                score_threshold=score_threshold)
+        
+        c_boxes = tf.concat(
+            [c_boxes, tf.gather(boxes[batch_idx], indices)], axis=0)
+        c_scores = tf.concat([c_scores, tf.gather(nms_scores, indices)], axis=0)
+        c_labels = tf.concat(
+            [c_labels, tf.zeros([tf.shape(indices)[0]], dtype=tf.int32)],
+            axis=0)
+
+        return c + 1, c_boxes, c_scores, c_labels
+
     iou_threshold = .5
     
+    batch_size = tf.shape(boxes)[0]
+    num_classes = tf.shape(class_scores)[-1]
+    
+    # TF while loop variables
+    cond_fn = lambda c, *args: c < num_classes
+    loop_shapes = [tf.TensorShape([1]), tf.TensorShape([None, 4]),
+                   tf.TensorShape([None]), tf.TensorShape([None])]
+
     boxes = tf.cast(boxes, tf.float32)
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=-1)
     boxes = tf.stack([y1, x1, y2, x2], axis=-1)
-    boxes = tf.reshape(boxes, [boxes.shape[0], -1, 4])
+    boxes = tf.reshape(boxes, [batch_size, -1, 4])
 
     class_scores = tf.cast(class_scores, tf.float32)
     
@@ -167,44 +199,29 @@ def nms(boxes: tf.Tensor,
     all_labels = []
     all_scores = []
 
-    for batch_idx in range(boxes.shape[0]):
-        batch_boxes = []
-        batch_labels = []
-        batch_scores = []
+    for batch_idx in range(batch_size):
+        body_fn = partial(body, batch_idx=batch_idx)
+        # For each class, get the effective boxes, labels and scores
+        c = tf.constant([0])
+        batch_boxes = tf.zeros([0, 4], dtype=tf.float32)
+        batch_labels = tf.zeros([0], dtype=tf.int32)
+        batch_scores = tf.zeros([0], dtype=tf.float32)
 
-        for c in range(class_scores.shape[-1]):
-            box_scores = class_scores[batch_idx, :, c]
-            indices = tf.image.non_max_suppression(
-                boxes[batch_idx],
-                box_scores,
-                max_output_size=100,
-                iou_threshold=iou_threshold,
-                score_threshold=score_threshold)
+        _, batch_boxes, batch_scores, batch_labels = tf.while_loop(
+            cond_fn, body_fn, 
+            loop_vars=[c, batch_boxes, batch_scores, batch_labels],
+            shape_invariants=loop_shapes)
+
+        y1, x1, y2, x2 = tf.split(batch_boxes, 4, axis=-1)
+        batch_boxes = tf.stack([x1, y1, x2, y2], axis=-1)
+        batch_boxes = tf.reshape(batch_boxes, [-1, 4])
                 
-            if indices.shape[0] > 0:
-                batch_boxes.append(tf.gather(boxes[batch_idx], indices))
-                batch_scores.append(tf.gather(box_scores, indices))
-                batch_labels.extend([c] * len(indices))
-        
-        if batch_boxes:
-            batch_boxes = tf.concat(batch_boxes, axis=0)
-            y1, x1, y2, x2 = tf.split(batch_boxes, 4, axis=-1)
-            batch_boxes = tf.stack([x1, y1, x2, y2], axis=-1)
-            batch_boxes = tf.reshape(batch_boxes, [-1, 4])
-            
-            batch_scores = tf.concat(batch_scores, axis=0)
-            
-            all_boxes.append(batch_boxes)
-            all_scores.append(batch_scores)
-            all_labels.append(tf.constant(batch_labels, dtype=tf.int32))
-        else:
-            all_boxes.append(tf.constant([]))
-            all_labels.append(tf.constant([]))
-            all_scores.append(tf.constant([]))
+        all_boxes.append(batch_boxes)
+        all_scores.append(batch_scores)
+        all_labels.append(batch_labels)
 
     return all_boxes, all_labels, all_scores
-
-
+    
 
 def bbox_overlap(boxes, gt_boxes):
     """

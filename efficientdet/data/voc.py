@@ -165,7 +165,7 @@ def build_dataset(dataset_path: Union[str, Path],
     ds = ds.padded_batch(batch_size=batch_size,
                          padded_shapes=((*im_input_size, 3), 
                                        ((None,), (None, 4))),
-                         padding_values=(0., (-1, 0.)))
+                         padding_values=(0., (-1, -1.)))
 
     
     return ds

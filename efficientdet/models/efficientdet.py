@@ -30,7 +30,7 @@ class EfficientDet(tf.keras.Model):
                  D : int = 0, 
                  bidirectional: bool = True,
                  freeze_backbone: bool = False,
-                 score_threshold: float = .01,
+                 score_threshold: float = .1,
                  weights : str = 'imagenet'):
                  
         super(EfficientDet, self).__init__()
@@ -60,7 +60,7 @@ class EfficientDet(tf.keras.Model):
             stride=self.anchors_config.strides[i - 3]
         ) for i in range(3, 8)] # 3 to 7 pyramid levels
 
-    def call(self, images, training: bool = True):
+    def call(self, images: tf.Tensor, training: bool = True):
         """
         EfficientDet forward step
 
@@ -92,15 +92,16 @@ class EfficientDet(tf.keras.Model):
             return bboxes, class_scores
 
         else:
+            im_shape = tf.shape(images)
+            batch_size, h, w = im_shape[0], im_shape[1], im_shape[2]
+            
             # Create the anchors
             anchors = [g(f[0].shape)
                        for g, f in zip(self.anchors_gen, bifnp_features)]
             anchors = tf.concat(anchors, axis=0)
             
             # Tile anchors over batches, so they can be regressed
-            batch_size = bboxes.shape[0]
-            anchors = tf.tile(tf.expand_dims(anchors, 0), 
-                              [batch_size, 1, 1])
+            anchors = tf.tile(tf.expand_dims(anchors, 0), [batch_size, 1, 1])
             
             class_scores = tf.reshape(class_scores, 
                                       [batch_size, -1, self.num_classes])
@@ -108,9 +109,10 @@ class EfficientDet(tf.keras.Model):
                                 [batch_size, -1, 4])
 
             boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
-            boxes = utils.bndbox.clip_boxes(boxes, images.shape[1:3])
+            boxes = utils.bndbox.clip_boxes(boxes, [h, w])
             boxes, labels, scores = utils.bndbox.nms(
                 boxes, class_scores, score_threshold=self.score_threshold)
+
             # TODO: Pad output
             return boxes, labels, scores
     

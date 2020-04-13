@@ -9,6 +9,7 @@ from pycocotools.cocoeval import COCOeval
 import efficientdet.utils as utils
 
 LossFn = Callable[[tf.Tensor] * 4, Tuple[tf.Tensor, tf.Tensor]]
+import time
 
 
 def get_lr(optimizer):
@@ -44,10 +45,23 @@ def train_single_epoch(model: tf.keras.Model,
                        optimizer: tf.optimizers.Optimizer,
                        grad_accum_steps: int,
                        loss_fn: LossFn,
+                       steps: int,
                        epoch: int,
                        num_classes: int,
                        print_every: int = 10):
     
+    @tf.function(
+        input_signature=[tf.TensorSpec(shape=[None, None, None, 3], 
+                                       dtype=tf.float32),
+                         tf.TensorSpec(shape=[None, None, 5], 
+                                       dtype=tf.float32),
+                         tf.TensorSpec(shape=[None, None, num_classes + 1], 
+                                       dtype=tf.float32)])
+    def train_step(images, r_targets, c_targets):
+        return _train_step(
+            model=model, optimizer=optimizer, loss_fn=loss_fn,
+            images=images, regress_targets=r_targets, labels=c_targets)
+
     acc_gradients = []
 
     running_loss = tf.metrics.Mean()
@@ -59,9 +73,8 @@ def train_single_epoch(model: tf.keras.Model,
         target_reg, target_clf = utils.anchors.anchor_targets_bbox(
             anchors, images, bbs, labels, num_classes)
 
-        reg_loss, clf_loss, grads = _train_step(
-            model=model, optimizer=optimizer, loss_fn=loss_fn,
-            images=images, regress_targets=target_reg, labels=target_clf)
+        reg_loss, clf_loss, grads = train_step(
+            images=images, r_targets=target_reg, c_targets=target_clf)
 
         if len(acc_gradients) == 0:
             acc_gradients = grads 
@@ -79,7 +92,7 @@ def train_single_epoch(model: tf.keras.Model,
 
         if (i + 1) % print_every == 0:
             lr = get_lr(optimizer)
-            print(f'Epoch[{epoch}] '
+            print(f'Epoch[{epoch}] [{i}/{steps}] '
                   f'loss: {running_loss.result():.6f} '
                   f'clf. loss: {running_clf_loss.result():.6f} '
                   f'reg. loss: {running_reg_loss.result():.6f} '
@@ -138,7 +151,9 @@ def _COCO_gt_annot(image_id: int,
 
 def evaluate(model: tf.keras.Model, 
              dataset: tf.data.Dataset,
-             class2idx: Mapping[str, int]):
+             class2idx: Mapping[str, int],
+             steps: int,
+             print_every: int = 10):
 
     gt_coco = dict(images=[], annotations=[])
     results_coco = []
@@ -180,6 +195,9 @@ def evaluate(model: tf.keras.Model,
             
             annot_id += len(annots)
             image_id += 1
+
+        if i % print_every == 0:
+            print(f'Validating[{i}/{steps}]...')
 
     # Convert custom annotations to COCO annots
     gtCOCO = COCO()

@@ -3,6 +3,8 @@ from typing import Sequence
 import tensorflow as tf
 
 from . import layers
+from efficientdet.utils import tf_utils
+
 
 EPSILON = 1e-5
 
@@ -44,8 +46,7 @@ class FastFusion(tf.keras.layers.Layer):
         w_sum = EPSILON + tf.reduce_sum(w, axis=0)
 
         # [INPUTS, BATCH, H, W, C]
-        weighted_inputs = tf.map_fn(lambda i: w[i] * inputs[i],
-                                    tf.range(self.size), dtype=tf.float32)
+        weighted_inputs = [w[i] * inputs[i] for i in range(self.size)]
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
@@ -124,8 +125,7 @@ class BiFPN(tf.keras.Model):
                                        padding='same')
 
         self.blocks = [BiFPNBlock(features) for i in range(n_blocks)]
-          
-    
+
     def call(self, inputs: Sequence[tf.Tensor], training: bool = True):
         
         # Each Pin has shape (BATCH, H, W, C)
@@ -137,8 +137,8 @@ class BiFPN(tf.keras.Model):
         P7 = self.gen_P7(self.relu(P6), training=training)
 
         features = [P3, P4, P5, P6, P7]
-        
-        for block in self.blocks:
-            features = block(features, training=training)
-
+        features = tf_utils.call_cascade(self.blocks, 
+                                         features, 
+                                         training=training)
         return features
+

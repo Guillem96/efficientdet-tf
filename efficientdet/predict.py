@@ -2,7 +2,6 @@ import click
 
 import tensorflow as tf
 
-import cv2
 import matplotlib.pyplot as plt
 
 import efficientdet
@@ -18,9 +17,10 @@ import efficientdet
 
 def main(**kwargs):
 
-    model, params = efficientdet.checkpoint.load(
+    # model, params = efficientdet.checkpoint.load(
+    #     kwargs['checkpoint'], score_threshold=kwargs['score'])
+    model = efficientdet.EfficientDet.from_pretrained(
         kwargs['checkpoint'], score_threshold=kwargs['score'])
-
     if kwargs['format'] == 'labelme':
         classes = params['classes_names'].split(',')
 
@@ -36,17 +36,7 @@ def main(**kwargs):
                                   training=False)
 
     labels = [classes[l] for l in labels[0]]
-    print(labels)
-    im = im.numpy()
-    for l, box, s in zip(labels, boxes[0].numpy(), scores[0]):
-        x1, y1, x2, y2 = box.astype('int32')
-
-        cv2.rectangle(im, 
-                     (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(im, l + ' {:.2f}'.format(s), 
-                    (x1, y1 - 10), 
-                    cv2.FONT_HERSHEY_PLAIN, 
-                    2, (0, 255, 0), 2)
+    im = efficientdet.visualizer.draw_boxes(im, boxes)
     
     plt.imshow(im)
     plt.axis('off')

@@ -121,7 +121,6 @@ class AnchorGenerator(object):
                      tf.TensorSpec(shape=[None, None, 4], dtype=tf.float32),
                      tf.TensorSpec(shape=[None, None], dtype=tf.int32),
                      tf.TensorSpec(shape=None, dtype=tf.int32),
-                     tf.TensorSpec(shape=None, dtype=tf.int32),
                      tf.TensorSpec(shape=None, dtype=tf.float32),
                      tf.TensorSpec(shape=None, dtype=tf.float32)]
 )
@@ -130,7 +129,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
                         bndboxes: tf.Tensor,
                         labels: tf.Tensor,
                         num_classes: int,
-                        padding_value: int = -1,
                         negative_overlap: float = 0.4,
                         positive_overlap: float = 0.5) -> Tuple[tf.Tensor,
                                                                 tf.Tensor]:
@@ -186,16 +184,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
                                     positive_overlap)
     positive_indices, ignore_indices, argmax_overlaps_inds = result
 
-    # Add padded instances to ignore indices
-    chose_labels = tf.gather_nd(labels, argmax_overlaps_inds)
-    chose_labels = tf.reshape(chose_labels, [batch_size, -1])
-    no_padding_mask = tf.not_equal(chose_labels, padding_value)
-    # Remove from positive the paddings
-    positive_indices = tf.logical_and(positive_indices, no_padding_mask)
-    # Add padded instances to ignore instances
-    ignore_indices = tf.logical_or(ignore_indices, 
-                                   tf.logical_not(no_padding_mask))
-    
     # Expand ignore indices with out of image anchors
     x_anchor_centre = (anchors[:, 0] + anchors[:, 2]) / 2.
     y_anchor_centre = (anchors[:, 1] + anchors[:, 3]) / 2.
@@ -205,6 +193,10 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     out_mask = tf.logical_or(out_x, out_y)
     ignore_indices = tf.logical_or(ignore_indices, out_mask)
 
+    # Gather classification labels
+    chose_labels = tf.gather_nd(labels, argmax_overlaps_inds)
+    chose_labels = tf.reshape(chose_labels, [batch_size, -1])
+    
     # Labels per anchor 
     # if is positive index add the class, else 0
     # To ignore the label add -1
@@ -291,6 +283,7 @@ def compute_gt_annotations(anchors: tf.Tensor,
     ignore_indices = tf.greater(max_overlaps, negative_overlap)
     ignore_indices = tf.logical_and(ignore_indices, 
                                     tf.logical_not(positive_indices))
+    ignore_indices = tf.logical_or(ignore_indices, tf.less(max_overlaps, 0.))
 
     return positive_indices, ignore_indices, batched_indices
 

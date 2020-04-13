@@ -28,6 +28,7 @@ def evaluate(**kwargs):
     engine.evaluate(
             model=model,
             dataset=ds,
+            steps=sum(1 for _ in ds),
             class2idx=class2idx)
 
 
