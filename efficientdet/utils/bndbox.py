@@ -173,7 +173,7 @@ def nms(boxes: tf.Tensor,
             [c_boxes, tf.gather(boxes[batch_idx], indices)], axis=0)
         c_scores = tf.concat([c_scores, tf.gather(nms_scores, indices)], axis=0)
         c_labels = tf.concat(
-            [c_labels, tf.zeros([tf.shape(indices)[0]], dtype=tf.int32) * c],
+            [c_labels, tf.ones([tf.shape(indices)[0]], dtype=tf.int32) * c],
             axis=0)
 
         return c + 1, c_boxes, c_scores, c_labels
