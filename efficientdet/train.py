@@ -25,12 +25,16 @@ def loss_fn(y_true_clf: tf.Tensor,
             y_true_reg: tf.Tensor, 
             y_pred_reg: tf.Tensor) -> Tuple[float, float]:
 
-    batch, n_anchors, n_classes = y_true_clf.shape
-
+    y_shape = tf.shape(y_true_clf)
+    batch = y_shape[0]
+    n_anchors = y_shape[1]
+    
     anchors_states = y_true_clf[:, :, -1]
-    not_ignore_idx = tf.where(anchors_states != -1)
-    true_idx = tf.where(anchors_states == 1)
-    normalizer = true_idx.shape[0]
+    not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
+    true_idx = tf.where(tf.equal(anchors_states, 1.))
+    
+    normalizer = tf.shape(true_idx)[0]
+    normalizer = tf.cast(normalizer, tf.float32)
     
     y_true_clf = tf.gather_nd(y_true_clf[:, :, :-1], not_ignore_idx)
     y_pred_clf = tf.gather_nd(y_pred_clf, not_ignore_idx)
@@ -44,7 +48,7 @@ def loss_fn(y_true_clf: tf.Tensor,
                                               y_pred_clf,
                                               reduction='sum')
 
-    return reg_loss / normalizer, clf_loss / normalizer
+    return tf.divide(reg_loss, normalizer), tf.divide(clf_loss, normalizer)
 
 
 def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
@@ -108,17 +112,21 @@ def train(**kwargs):
             im_size=(model.config.input_size,) * 2,
             shuffle=False,
             data_augmentation=False,
-            batch_size=min(1, kwargs['batch_size'] // 2))
+            batch_size=max(1, kwargs['batch_size'] // 2))
 
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
     
-    steps_per_epoch = (ds_len(ds) // kwargs['grad_accum_steps']) + 1
+    steps_per_epoch = ds_len(ds)
+    if val_ds is not None:
+        validation_steps = ds_len(val_ds)
+
     if kwargs['w_scheduler']:
+        optim_steps = (steps_per_epoch // kwargs['grad_accum_steps']) + 1
         lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
             kwargs['learning_rate'],
-            warmup_steps=steps_per_epoch,
-            decay_steps=steps_per_epoch * (kwargs['epochs'] - 1),
+            warmup_steps=optim_steps,
+            decay_steps=optim_steps * (kwargs['epochs'] - 1),
             alpha=kwargs['alpha'])
     else:
         lr = kwargs['learning_rate']
@@ -138,12 +146,16 @@ def train(**kwargs):
             loss_fn=loss_fn,
             num_classes=kwargs['n_classes'],
             epoch=epoch,
+            steps=steps_per_epoch,
             print_every=kwargs['print_freq'])
 
         if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
+            print('Evaluating COCO mAP...')
             engine.evaluate(
                 model=model,
                 dataset=val_ds,
+                steps=validation_steps,
+                print_every=kwargs['print_freq'],
                 class2idx=class2idx)
         
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
