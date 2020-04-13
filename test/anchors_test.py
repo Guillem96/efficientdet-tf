@@ -1,13 +1,13 @@
 import unittest
 
-import cv2
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-import efficientdet.utils as utils
 import efficientdet.data.voc as voc
 import efficientdet.config as config
+from efficientdet import utils, visualizer
+from efficientdet.data.preprocess import unnormalize_image
 
 def _get_res_at_level_i(res, i):
     return int(res / (2**i))
@@ -41,11 +41,7 @@ class AnchorsTest(unittest.TestCase):
         boxes = self.generate_anchors(config.AnchorsConfig(), 
                                       im_random.shape[0])
 
-        for box in boxes.numpy():
-            box = box.astype('int32')
-            cv2.rectangle(im_random, 
-                          (box[0], box[1]), 
-                          (box[2], box[3]), (0, 255, 0), 1)
+        im_random = visualizer.draw_boxes(im_random, boxes)
 
         plt.imshow(im_random)
         plt.show(block=True)
@@ -64,18 +60,10 @@ class AnchorsTest(unittest.TestCase):
                 anchors, im, bbs, l, len(voc.IDX_2_LABEL))
 
             nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
-            im_random = im[0].numpy()
-            for box in nearest_anchors:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 255, 0), 1)
-
-            for box in bbs.numpy()[0]:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 0, 255), 3)
+            im_random =  unnormalize_image(im[0])
+            im_random = visualizer.draw_boxes(im_random, nearest_anchors)
+            im_random = visualizer.draw_boxes(
+                im_random, bbs[0], colors=[0, 0, 255])
             
             for label in l[0]:
                 print(voc.IDX_2_LABEL[int(label)])
@@ -110,12 +98,8 @@ class AnchorsTest(unittest.TestCase):
             regressed_boxes = utils.bndbox.regress_bndboxes(nearest_anchors, 
                                                             nearest_regressors)
 
-            im_random = im[0].numpy()
-            for box in regressed_boxes[0].numpy():
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 255, 0), 1)
+            im_random = unnormalize_image(im[0])
+            im_random = visualizer.draw_boxes(im_random, regressed_boxes[0])
             
             plt.imshow(im_random)
             plt.show(block=True)

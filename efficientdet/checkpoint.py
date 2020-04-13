@@ -7,8 +7,6 @@ from urllib.parse import urlparse
 
 import tensorflow as tf
 
-from google import auth
-from google.cloud import storage
 from .models import EfficientDet
 
 
@@ -48,6 +46,8 @@ def save(model: EfficientDet,
     model.save_weights(str(model_fname))
 
     if to_gcs:
+        from google.cloud import storage
+
         client = storage.Client(project='ml-generic-purpose')
         bucket = client.bucket('ml-generic-purpose-tf-models')
         prefix = save_dir.stem
@@ -70,6 +70,9 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
     save_dir_url = urlparse(str(save_dir_or_url))
 
     if save_dir_url.scheme == 'gs':
+        from google import auth
+        from google.cloud import storage
+
         save_dir = Path.home() / '.effdet-checkpoints'
         save_dir.mkdir(exist_ok=True, parents=True)
         
