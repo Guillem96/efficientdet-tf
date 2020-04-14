@@ -15,7 +15,7 @@ import tensorflow as tf
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
-from .preprocess import normalize_image, augment
+from .preprocess import augment
 
 
 def _load_bbox_from_rectangle(points: Sequence[float]) -> Sequence[float]:
@@ -47,8 +47,8 @@ def _load_labelme_instance(
     labels = []
 
     image_path = Path(images_base_path) / annot['imagePath']
-    image = io_utils.load_image(str(image_path), im_input_size)
-    image = normalize_image(image)
+    image = io_utils.load_image(str(image_path), 
+                                im_input_size, normalize_image=True)
     
     w, h = annot['imageWidth'], annot['imageHeight']
 
@@ -60,7 +60,7 @@ def _load_labelme_instance(
             points = _load_bbox_from_polygon(shape['points'])
         else:
             raise ValueError(
-                f'Unexpected shape type {shape_type} in file {annot_path}')
+                f'Unexpected shape type: {shape_type} in file {annot_path}')
                 
         label = shape['label']
         bbs.append(points)
@@ -174,10 +174,5 @@ def build_dataset(annotations_path: Union[str, Path],
 
     if data_augmentation:
         ds = ds.map(augment)
-          
-    ds = ds.padded_batch(batch_size=batch_size,
-                         padded_shapes=((*im_input_size, 3), 
-                                       ((None,), (None, 4))),
-                         padding_values=(0., (-1, 0.)))
         
     return ds

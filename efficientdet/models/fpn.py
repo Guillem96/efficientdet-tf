@@ -1,3 +1,5 @@
+from typing import Sequence
+
 import tensorflow as tf
 
 from . import layers
@@ -7,13 +9,16 @@ class Merge(tf.keras.layers.Layer):
 
     def __init__(self, features: int = 64):
         super(Merge, self).__init__()
-
+        
         self.resize = layers.Resize(features)
-        self.conv = tf.keras.layers.Conv2D(features,
-                                           kernel_size=3,
-                                           strides=1,
-                                           padding='same')
-    def call(self, features: tf.Tensor, training=True):
+        self.conv = layers.ConvBlock(features,
+                                     kernel_size=3,
+                                     strides=1,
+                                     separable=True,
+                                     activation='swish',
+                                     padding='same')
+                                     
+    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         a, b = features
         b = self.resize(b, a.shape, training=training)
         return self.conv(a + b)
@@ -46,7 +51,9 @@ class FPN(tf.keras.Model):
                                              strides=2, 
                                              padding='same')
         
-    def call(self, features: tf.Tensor, training: bool = True):
+    def call(self, 
+             features: tf.Tensor, 
+             training: bool = True) -> Sequence[tf.Tensor]:
         _, _, *C = features
 
         P3, P4, P5 = [self.pointwises[i](C[i]) for i in range(3)]

@@ -7,10 +7,6 @@ from urllib.parse import urlparse
 
 import tensorflow as tf
 
-from google import auth
-from google.cloud import storage
-from .models import EfficientDet
-
 
 def _md5(fname):
     hash_md5 = hashlib.md5()
@@ -20,7 +16,7 @@ def _md5(fname):
     return base64.b64encode(hash_md5.digest()).decode()
 
 
-def save(model: EfficientDet,
+def save(model: 'EfficientDet',
          parameters: dict,
          save_dir: Union[str, Path],
          to_gcs: bool = False):
@@ -48,6 +44,8 @@ def save(model: EfficientDet,
     model.save_weights(str(model_fname))
 
     if to_gcs:
+        from google.cloud import storage
+
         client = storage.Client(project='ml-generic-purpose')
         bucket = client.bucket('ml-generic-purpose-tf-models')
         prefix = save_dir.stem
@@ -59,7 +57,7 @@ def save(model: EfficientDet,
             f'gs://ml-generic-purpose-tf-models/{prefix}/model.tf')
 
 
-def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
+def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
     """
     Load efficientdet model from google cloud storage or from local
     file.
@@ -70,6 +68,9 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
     save_dir_url = urlparse(str(save_dir_or_url))
 
     if save_dir_url.scheme == 'gs':
+        from google import auth
+        from google.cloud import storage
+
         save_dir = Path.home() / '.effdet-checkpoints'
         save_dir.mkdir(exist_ok=True, parents=True)
         
@@ -103,6 +104,8 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
 
     with hp_fname.open() as f:
         hp = json.load(f)
+
+    from efficientdet.models import EfficientDet
 
     model = EfficientDet(
         hp['n_classes'],

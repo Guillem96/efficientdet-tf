@@ -1,13 +1,13 @@
 import unittest
 
-import cv2
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-import efficientdet.utils as utils
 import efficientdet.data.voc as voc
 import efficientdet.config as config
+from efficientdet import utils, visualizer
+from efficientdet.data.preprocess import unnormalize_image
 
 def _get_res_at_level_i(res, i):
     return int(res / (2**i))
@@ -41,11 +41,7 @@ class AnchorsTest(unittest.TestCase):
         boxes = self.generate_anchors(config.AnchorsConfig(), 
                                       im_random.shape[0])
 
-        for box in boxes.numpy():
-            box = box.astype('int32')
-            cv2.rectangle(im_random, 
-                          (box[0], box[1]), 
-                          (box[2], box[3]), (0, 255, 0), 1)
+        im_random = visualizer.draw_boxes(im_random, boxes)
 
         plt.imshow(im_random)
         plt.show(block=True)
@@ -55,37 +51,31 @@ class AnchorsTest(unittest.TestCase):
         ds = voc.build_dataset('test/data/VOC2007',
                                im_input_size=(512, 512))
 
-        anchors = self.generate_anchors(config.AnchorsConfig(), 
-                                        512)
+        anchors = self.generate_anchors(config.AnchorsConfig(), 512)
+        im, (l, bbs) = next(iter(ds.take(1)))
+
+        gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
+            anchors, 
+            tf.expand_dims(im, 0), 
+            tf.expand_dims(bbs, 0), 
+            tf.expand_dims(l, 0), 
+            len(voc.IDX_2_LABEL))
+
+        nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
+        im_random =  unnormalize_image(im)
+        im_random = visualizer.draw_boxes(im_random, nearest_anchors)
+        im_random = visualizer.draw_boxes(
+            im_random, bbs, colors=[0, 0, 255])
         
-        for im, (l, bbs) in ds.take(1):
+        for label in l:
+            print(voc.IDX_2_LABEL[int(label)])
 
-            gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
-                anchors, im, bbs, l, len(voc.IDX_2_LABEL))
+        plt.imshow(im_random)
+        plt.show(block=True)
 
-            nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
-            im_random = im[0].numpy()
-            for box in nearest_anchors:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 255, 0), 1)
-
-            for box in bbs.numpy()[0]:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 0, 255), 3)
-            
-            for label in l[0]:
-                print(voc.IDX_2_LABEL[int(label)])
-
-            plt.imshow(im_random)
-            plt.show(block=True)
-
-            print('GT shapes:', gt_labels.shape, gt_reg.shape)
-            print('Found any overlapping anchor?', 
-                  np.any(gt_labels[:, :, -1] == 1.))
+        print('GT shapes:', gt_labels.shape, gt_reg.shape)
+        print('Found any overlapping anchor?', 
+                np.any(gt_labels[:, :, -1] == 1.))
 
     def test_regress_boxes(self):
         print('Regress anchors test')
@@ -95,30 +85,29 @@ class AnchorsTest(unittest.TestCase):
                                im_input_size=(512, 512))
 
         anchors = self.generate_anchors(config.AnchorsConfig(), 512)
+        im, (l, bbs) = next(iter(ds.take(1)))
+            
+        gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
+            anchors, 
+            tf.expand_dims(im, 0), 
+            tf.expand_dims(bbs, 0), 
+            tf.expand_dims(l, 0), 
+            len(voc.IDX_2_LABEL))
+
+        near_mask = gt_reg[0, :, -1] == 1
+        nearest_regressors = tf.expand_dims(
+            tf.boolean_mask(gt_reg[0], near_mask)[:, :-1], 0)
+        nearest_anchors = tf.expand_dims(anchors[near_mask], 0)
+
+        # apply regression to boxes
+        regressed_boxes = utils.bndbox.regress_bndboxes(nearest_anchors, 
+                                                        nearest_regressors)
+
+        im_random = unnormalize_image(im)
+        im_random = visualizer.draw_boxes(im_random, regressed_boxes[0])
         
-        for im, (l, bbs) in ds.take(1):
-            
-            gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
-                anchors, im, bbs, l, len(voc.IDX_2_LABEL))
-
-            near_mask = gt_reg[0, :, -1] == 1
-            nearest_regressors = tf.expand_dims(
-                tf.boolean_mask(gt_reg[0], near_mask)[:, :-1], 0)
-            nearest_anchors = tf.expand_dims(anchors[near_mask], 0)
-
-            # apply regression to boxes
-            regressed_boxes = utils.bndbox.regress_bndboxes(nearest_anchors, 
-                                                            nearest_regressors)
-
-            im_random = im[0].numpy()
-            for box in regressed_boxes[0].numpy():
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 255, 0), 1)
-            
-            plt.imshow(im_random)
-            plt.show(block=True)
+        plt.imshow(im_random)
+        plt.show(block=True)
 
 
 if __name__ == "__main__":

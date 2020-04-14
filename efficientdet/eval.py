@@ -23,11 +23,12 @@ def evaluate(**kwargs):
         im_size=(model.config.input_size,) * 2,
         class_names=params['classes_names'].split(','),
         data_augmentation=False,
-        batch_size=1)
+        batch_size=8)
     
     engine.evaluate(
             model=model,
             dataset=ds,
+            steps=sum(1 for _ in ds),
             class2idx=class2idx)
 
 

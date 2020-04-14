@@ -16,9 +16,9 @@ def focal_loss(y_true: tf.Tensor,
     y_true = tf.cast(y_true, tf.float32)
 
     alpha = tf.ones_like(y_true) * alpha 
-    alpha = tf.where(y_true == 1, alpha, 1 - alpha)
+    alpha = tf.where(tf.equal(y_true, 1.), alpha, 1 - alpha)
     
-    pt = tf.where(y_true == 1, y_pred, 1 - y_pred)
+    pt = tf.where(tf.equal(y_true, 1.), y_pred, 1 - y_pred)
     
     loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
     loss = tf.reduce_sum(loss, axis=-1)

@@ -1,7 +1,10 @@
-import tensorflow as tf
 import math
 
+import tensorflow as tf
+
 from . import layers
+from efficientdet.utils import tf_utils
+
 
 class RetinaNetBBPredictor(tf.keras.Model):
 
@@ -14,7 +17,7 @@ class RetinaNetBBPredictor(tf.keras.Model):
         self.feature_extractors = [
             layers.ConvBlock(width, 
                              kernel_size=3,
-                             activation='relu',
+                             activation='swish',
                              padding='same')
             for _ in range(depth)]
 
@@ -22,12 +25,12 @@ class RetinaNetBBPredictor(tf.keras.Model):
                                                    kernel_size=3,
                                                    padding='same')
 
-    def call(self, features, training=True):
-        x = features
-        for fe in self.feature_extractors:
-            x = fe(x, training=training)
-        return tf.reshape(self.bb_regressor(x), 
-                          [x.shape[0], -1, 4])
+    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
+        batch_size = tf.shape(features)[0]
+
+        x = tf_utils.call_cascade(
+            self.feature_extractors, features, training=training)
+        return tf.reshape(self.bb_regressor(x), [batch_size, -1, 4])
 
 
 class RetinaNetClassifier(tf.keras.Model):
@@ -44,7 +47,7 @@ class RetinaNetClassifier(tf.keras.Model):
         self.feature_extractors = [
             layers.ConvBlock(width, 
                              kernel_size=3,
-                             activation='relu',
+                             activation='swish',
                              padding='same')
             for _ in range(depth)]
         
@@ -56,10 +59,10 @@ class RetinaNetClassifier(tf.keras.Model):
                                                 padding='same',
                                                 bias_initializer=w_init)
 
-    def call(self, features, training=True):
-        x = features
-        for fe in self.feature_extractors:
-            x = fe(x, training=training)
-        return tf.reshape(self.cls_score(x), 
-                          [x.shape[0], -1, self.num_classes])
+    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
+        batch_size = tf.shape(features)[0]
+
+        x = tf_utils.call_cascade(
+            self.feature_extractors, features, training=training)
+        return tf.reshape(self.cls_score(x), [batch_size, -1, self.num_classes])
 

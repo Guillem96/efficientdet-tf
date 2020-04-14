@@ -3,8 +3,8 @@ from typing import List, Union
 
 import tensorflow as tf
 
-import efficientdet.utils as utils
 import efficientdet.config as config
+from efficientdet.utils import anchors, bndbox
 
 from efficientdet import models
 
@@ -54,13 +54,13 @@ class EfficientDet(tf.keras.Model):
         self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
                                                    self.config.Dclass)
 
-        self.anchors_gen = [utils.anchors.AnchorGenerator(
+        self.anchors_gen = [anchors.AnchorGenerator(
             size=self.anchors_config.sizes[i - 3],
             aspect_ratios=self.anchors_config.ratios,
             stride=self.anchors_config.strides[i - 3]
         ) for i in range(3, 8)] # 3 to 7 pyramid levels
 
-    def call(self, images, training: bool = True):
+    def call(self, images: tf.Tensor, training: bool = True):
         """
         EfficientDet forward step
 
@@ -92,25 +92,27 @@ class EfficientDet(tf.keras.Model):
             return bboxes, class_scores
 
         else:
+            im_shape = tf.shape(images)
+            batch_size, h, w = im_shape[0], im_shape[1], im_shape[2]
+            
             # Create the anchors
             anchors = [g(f[0].shape)
                        for g, f in zip(self.anchors_gen, bifnp_features)]
             anchors = tf.concat(anchors, axis=0)
             
             # Tile anchors over batches, so they can be regressed
-            batch_size = bboxes.shape[0]
-            anchors = tf.tile(tf.expand_dims(anchors, 0), 
-                              [batch_size, 1, 1])
+            anchors = tf.tile(tf.expand_dims(anchors, 0), [batch_size, 1, 1])
             
             class_scores = tf.reshape(class_scores, 
                                       [batch_size, -1, self.num_classes])
             bboxes = tf.reshape(bboxes, 
                                 [batch_size, -1, 4])
 
-            boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
-            boxes = utils.bndbox.clip_boxes(boxes, images.shape[1:3])
-            boxes, labels, scores = utils.bndbox.nms(
+            boxes = bndbox.regress_bndboxes(anchors, bboxes)
+            boxes = bndbox.clip_boxes(boxes, [h, w])
+            boxes, labels, scores = bndbox.nms(
                 boxes, class_scores, score_threshold=self.score_threshold)
+
             # TODO: Pad output
             return boxes, labels, scores
     
@@ -137,11 +139,13 @@ class EfficientDet(tf.keras.Model):
         EfficientDet
         """
         AVAILABLE_MODELS = {
-            'D0-VOC': 'gs://ml-generic-purpose-tf-models/D0-VOC'}
+            'D0-VOC': 'gs://ml-generic-purpose-tf-models/D0-VOC',
+            'D0-VOC-FPN': 'gs://ml-generic-purpose-tf-models/D0-VOC-FPN'
+        }
 
         # TODO: Make checkpoint path also a reference to a path.
         # For example: EfficientDet.from_pretrained('voc')        
-        from efficientdet.checkpoint import load
+        from efficientdet.utils.checkpoint import load
 
         if str(checkpoint_path) in AVAILABLE_MODELS:
             checkpoint_path = AVAILABLE_MODELS[checkpoint_path]

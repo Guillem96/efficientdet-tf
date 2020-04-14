@@ -2,13 +2,14 @@ import unittest
 
 import unittest
 
-import cv2
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 import efficientdet.utils as utils
 import efficientdet.config as config
 import efficientdet.data.labelme as labelme
+from efficientdet.data.preprocess import unnormalize_image
 
 
 class LabelmeDatasetTest(unittest.TestCase):
@@ -39,38 +40,27 @@ class LabelmeDatasetTest(unittest.TestCase):
                                    im_input_size=(512, 512))
 
         anchors = self.generate_anchors(config.AnchorsConfig(), 512)
+        im, (l, bbs) = next(iter(ds.take(1)))
+        im = unnormalize_image(im)
         
-        for im, (l, bbs) in ds.take(1):
+        gt_reg, gt_labels = utils.anchors.anchor_targets_bbox(
+            anchors, 
+            tf.expand_dims(im, 0), 
+            tf.expand_dims(bbs, 0), 
+            tf.expand_dims(l, 0), 
+            len(classes))
 
-            gt_reg, gt_labels = \
-                utils.anchors.anchor_targets_bbox(anchors.numpy(), 
-                                                  im.numpy(), 
-                                                  bbs.numpy(), l.numpy(), 
-                                                  len(classes))
-            nearest_anchors = anchors[gt_reg[0, :, -1] == 1].numpy()
+        nearest_anchors = anchors[gt_reg[0, :, -1] == 1]
+        im = utils.visualizer.draw_boxes(im, nearest_anchors)
+        im = utils.visualizer.draw_boxes(im, bbs, colors=[(255, 0, 0)])
             
-            im_random = im[0].numpy()[..., ::-1].copy()
-            for box in nearest_anchors:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 255, 0), 1)
+        plt.imshow(im)
+        plt.axis('off')
+        plt.show(block=True)
 
-            for box in bbs.numpy()[0]:
-                box = box.astype('int32')
-                cv2.rectangle(im_random, 
-                              (box[0], box[1]), 
-                              (box[2], box[3]), (0, 0, 255), 1)
-            
-            for label in l[0]:
-                print(classes[int(label)])
-
-            cv2.imshow('', im_random)
-            cv2.waitKey()
-
-            print('GT shapes:', gt_labels.shape, gt_reg.shape)
-            print('Found any overlapping anchor?', 
-                  np.any(gt_labels[:, :, -1] == 1.))
+        print('GT shapes:', gt_labels.shape, gt_reg.shape)
+        print('Found any overlapping anchor?', 
+                np.any(gt_labels[:, :, -1] == 1.))
 
 
 if __name__ == "__main__":

@@ -4,35 +4,30 @@ import tensorflow as tf
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 
 
-class EfficientDetLRScheduler(LearningRateSchedule):
+class WarmupCosineDecayLRScheduler(LearningRateSchedule):
 
     def __init__(self, 
                  max_lr: float,
-                 n_epochs: int, 
-                 steps_per_epoch: int,
+                 warmup_steps: int,
+                 decay_steps: int,
                  alpha: float = 0.):
-        super(EfficientDetLRScheduler, self).__init__()
+        super(WarmupCosineDecayLRScheduler, self).__init__()
 
-        self.name = 'EfficientDetLRScheduler'
-        self.n_epochs = n_epochs
-        self.steps_per_epoch = steps_per_epoch
+        self.name = 'WarmupCosineDecayLRScheduler'
         self.alpha = alpha
 
-        self.initial_lr = 0.
         self.max_lr = max_lr
         self.last_step = 0
 
-        self.linear_increase = tf.linspace(
-            self.initial_lr, self.max_lr, self.steps_per_epoch)
-        
-        self.total_steps = n_epochs * steps_per_epoch
-        self.warmup_steps = steps_per_epoch
-        self.decay_steps = self.total_steps - self.warmup_steps
+        self.warmup_steps = warmup_steps
+        self.linear_increase = self.max_lr / float(self.warmup_steps)
+
+        self.decay_steps = decay_steps
 
     @property
     def current_lr(self):
         if self.last_step < self.warmup_steps:
-            return self.linear_increase[self.last_step]
+            return self.linear_increase * self.last_step
         else:
             rate = (self.last_step - self.warmup_steps) / self.decay_steps
             cosine_decayed = 0.5 * (1.0 + tf.cos(

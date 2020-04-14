@@ -173,14 +173,14 @@ For more on how to use pretrained model see the inference example [here](example
 
 How to use pretrained models:
 
-1. Choose your favourite badge. For example: ![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
+1. Choose your favorite badge. For example: ![](https://img.shields.io/badge/Weights-D0--VOC-9cf)
 2. Load the model referencing the badge (use the white and blue text) as shown below.
 
 ```python
 from efficientdet import EfficientDet
 
 badge_name = 'D0-VOC'
-# With pretrained classifiaction head
+# With pretrained classification head
 model = EfficientDet.from_pretrained(badge_name)
 
 # With custom head
@@ -202,17 +202,17 @@ This will automatically append a custom classification head to a pretrained mode
 
 ## Roadmap
 
-The road map is ordered by priority. Depending on my feelings this can go up and down, so don't take it as somthing that will be done immediately.
+The road map is ordered by priority. Depending on my feelings this can go up and down, so don't take it as something that will be done immediately.
 
 - [x] Migrate anchors code to Tensorflow
-- [ ] Define as many tf.functions as possible
+- [x] Define as many tf.functions as possible (Now the training is 7 times faster than without `tf.function`)
 - [ ] Define COCO input pipeline using `tf.data`
 - [ ] Distribute training over multiple GPUs
 - [x] Learning rate schedulers to speed up and enhance training
 - [x] Proper evaluation using COCO mAP
 - [ ] Reproduce similar paper results
-- [ ] Visualization utils
-- [ ] Define a custom data-format to train with custom datasets
+- [x] Visualization utils
+- [ ] Define a custom data-format to train with own datasets
 - [x] Data augmentation pipelines
 
 ## References

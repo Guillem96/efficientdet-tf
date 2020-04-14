@@ -1,6 +1,10 @@
+from typing import Sequence
+
 import tensorflow as tf
 
 from . import layers
+from efficientdet.utils import tf_utils
+
 
 EPSILON = 1e-5
 
@@ -16,15 +20,17 @@ class FastFusion(tf.keras.layers.Layer):
                              trainable=True)
         self.relu = tf.keras.layers.Activation('relu')
         
-        self.conv = layers.ConvBlock(separable=True,
+        self.conv = layers.ConvBlock(features,
+                                     separable=True,
                                      kernel_size=3, 
                                      strides=1, 
                                      padding='same', 
-                                     activation='relu')
-        self.sum = tf.keras.layers.Add()
+                                     activation='swish')
         self.resize = layers.Resize(features)
 
-    def call(self, inputs, training=True):
+    def call(self, 
+             inputs: Sequence[tf.Tensor], 
+             training: bool = True) -> tf.Tensor:
         """
         Parameters
         ----------
@@ -33,18 +39,18 @@ class FastFusion(tf.keras.layers.Layer):
         # The last feature map has to be resized according to the
         # other inputs
         inputs[-1] = self.resize(
-            inputs[-1], inputs[0].shape, training=training)
+            inputs[-1], tf.shape(inputs[0]), training=training)
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w, axis=0)
 
-        # List of (BATCH, H, W, C)
+        # [INPUTS, BATCH, H, W, C]
         weighted_inputs = [w[i] * inputs[i] for i in range(self.size)]
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
-        weighted_sum = self.sum(weighted_inputs) / w_sum
+        weighted_sum = tf.reduce_sum(weighted_inputs, axis=0) / w_sum
         return self.conv(weighted_sum, training=training)
         
 
@@ -67,7 +73,9 @@ class BiFPNBlock(tf.keras.Model):
         self.ff_4_out = FastFusion(3, features)
         self.ff_3_out = FastFusion(2, features)
 
-    def call(self, features, training=True):
+    def call(self, 
+             features: Sequence[tf.Tensor], 
+             training: bool = True) -> Sequence[tf.Tensor]:
         """
         Computes the feature fusion of bottom-up features comming
         from the Backbone NN
@@ -98,9 +106,7 @@ class BiFPNBlock(tf.keras.Model):
 
 class BiFPN(tf.keras.Model):
     
-    def __init__(self, 
-                 features=64,
-                 n_blocks=3):
+    def __init__(self, features: int = 64, n_blocks: int = 3):
         super(BiFPN, self).__init__()
 
         # One pixel-wise for each feature comming from the 
@@ -121,9 +127,10 @@ class BiFPN(tf.keras.Model):
                                        padding='same')
 
         self.blocks = [BiFPNBlock(features) for i in range(n_blocks)]
-          
-    
-    def call(self, inputs, training=True):
+
+    def call(self, 
+             inputs: Sequence[tf.Tensor], 
+             training: bool = True) -> Sequence[tf.Tensor]:
         
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv
@@ -133,8 +140,9 @@ class BiFPN(tf.keras.Model):
         P6 = self.gen_P6(C[-1], training=training)
         P7 = self.gen_P7(self.relu(P6), training=training)
 
-        features = P3, P4, P5, P6, P7   
-        for block in self.blocks:
-            features = block(features, training=training)
-
+        features = [P3, P4, P5, P6, P7]
+        features = tf_utils.call_cascade(self.blocks, 
+                                         features, 
+                                         training=training)
         return features
+

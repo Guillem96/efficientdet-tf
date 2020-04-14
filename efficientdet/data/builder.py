@@ -11,6 +11,7 @@ AVAILABLE_FORMATS = {'VOC', 'labelme'}
 def build_ds(format: str,
              annots_path: str,
              im_size: Tuple[int, int],
+             batch_size: int,
              class_names: Sequence[str] = [],
              data_augmentation: bool = True,
              **kwargs) -> Tuple[tf.data.Dataset, Mapping[str, int]]:
@@ -49,8 +50,6 @@ def build_ds(format: str,
             im_input_size=im_size,
             **kwargs)
 
-        return ds, class2idx
-
     elif format == 'labelme':
         assert len(class_names) > 0, 'You must specify class names'
         assert kwargs['images_path'] != '', 'Images base path missing'
@@ -65,4 +64,10 @@ def build_ds(format: str,
             data_augmentation=data_augmentation,
             **kwargs)
         
-        return ds, class2idx
+    
+    ds = ds.padded_batch(batch_size=batch_size,
+                         padded_shapes=((*im_size, 3), 
+                                       ((None,), (None, 4))),
+                         padding_values=(0., (-1, -1.)))
+
+    return ds, class2idx
