@@ -9,15 +9,13 @@ import efficientdet
 import efficientdet.utils as utils
 import efficientdet.engine as engine
 
+
 huber_loss_fn = tf.losses.Huber(
     reduction=tf.losses.Reduction.SUM)
 
 
 def ds_len(ds):
-    i = 0
-    for _ in ds:
-        i += 1
-    return i
+    return sum(1 for _ in ds)
 
 
 def loss_fn(y_true_clf: tf.Tensor, 

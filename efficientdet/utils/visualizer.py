@@ -10,6 +10,7 @@ Box = Union[Tuple[int, int, int, int], tf.Tensor]
 Boxes = Union[Sequence[Box], tf.Tensor, np.ndarray]
 Color = Tuple[int, int, int]
 
+
 def _image_to_pil(image: ImageType) -> 'Image':
 
     if isinstance(image, Image.Image):
@@ -28,20 +29,20 @@ def _image_to_pil(image: ImageType) -> 'Image':
 
 def _parse_box(box: Box) -> Box:
     if isinstance(box, tf.Tensor):
-        return box.numpy().astype('int32').tolist()
+        return tuple(box.numpy().astype('int32').tolist())
     elif isinstance(box, np.ndarray):
-        return box.astype('int32').tolist()
+        return tuple(box.astype('int32').tolist())
     else:
-        return list(map(int, box))
+        return tuple(map(int, box))
 
 
 def _parse_boxes(boxes: Boxes):
     if isinstance(boxes, tf.Tensor):
-        return boxes.numpy().astype('int32').tolist()
+        boxes = boxes.numpy().astype('int32').tolist()
     elif isinstance(boxes, np.ndarray):
-        return boxes.astype('int32').tolist()
-    else:
-        return [_parse_box(b) for b in boxes]
+        boxes = boxes.astype('int32').tolist()
+    
+    return [_parse_box(b) for b in boxes]
 
 
 def draw_boxes(image: ImageType, 
