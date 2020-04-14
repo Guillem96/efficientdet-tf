@@ -65,15 +65,8 @@ def normalize_bndboxes(boxes: tf.Tensor,
     return tf.concat([x1, y1, x2, y2], axis=1)
 
 
-_ListOfInt = List[int]
-_TupleOfInt = Tuple[int, int, int, int]
-_MeanStd = Union[_ListOfInt, _TupleOfInt]
-
-
 def regress_bndboxes(boxes: tf.Tensor,
-                     regressors: tf.Tensor,
-                     mean: _MeanStd = None, 
-                     std: _MeanStd = None) -> tf.Tensor:
+                     regressors: tf.Tensor) -> tf.Tensor:
     """
     Apply scale invariant regression to boxes.
 
@@ -92,20 +85,8 @@ def regress_bndboxes(boxes: tf.Tensor,
     boxes = tf.cast(boxes, tf.float32)
     regressors = tf.cast(regressors, tf.float32)
     
-    if mean is None:
-        mean = tf.constant([0., 0., 0., 0.], dtype=tf.float32)
-    if std is None:
-        std = tf.constant([0.2, 0.2, 0.2, 0.2], dtype=tf.float32)
-
-    if isinstance(mean, (list, tuple)):
-        mean = tf.constant(mean, dtype=tf.float32)
-    elif not isinstance(mean, tf.Tensor):
-        raise ValueError('Expected mean to be a np.ndarray, list or tuple. Received: {}'.format(type(mean)))
-
-    if isinstance(std, (list, tuple)):
-        std = tf.constant(std, dtype=tf.float32)
-    elif not isinstance(std, tf.Tensor):
-        raise ValueError('Expected std to be a np.ndarray, list or tuple. Received: {}'.format(type(std)))
+    mean = tf.constant([0., 0., 0., 0.], dtype=tf.float32)
+    std = tf.constant([0.2, 0.2, 0.2, 0.2], dtype=tf.float32)
 
     width  = boxes[:, :, 2] - boxes[:, :, 0]
     height = boxes[:, :, 3] - boxes[:, :, 1]
@@ -134,6 +115,7 @@ def clip_boxes(boxes: tf.Tensor,
     return tf.stack([x1, y1, x2, y2], axis=2)
 
 
+# TODO: tf.function this?
 def nms(boxes: tf.Tensor, 
         class_scores: tf.Tensor,
         score_threshold: float = 0.5) -> tf.Tensor:

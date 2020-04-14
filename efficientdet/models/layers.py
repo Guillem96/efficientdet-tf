@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import tensorflow as tf
 
 
@@ -12,7 +14,7 @@ class Resize(tf.keras.Model):
 
     def call(self, 
              images: tf.Tensor, 
-             target_dim=None, 
+             target_dim: Tuple[int, int, int, int] = None, 
              training: bool = True) -> tf.Tensor:
         dims = target_dim[1:3]
         x = tf.image.resize(images, dims, method='nearest')
@@ -43,6 +45,6 @@ class ConvBlock(tf.keras.Model):
         else:
             self.activation = tf.keras.layers.Activation('linear')
 
-    def call(self, x, training=True):
+    def call(self, x: tf.Tensor, training: bool = True) -> tf.Tensor:
         x = self.bn(self.conv(x), training=training)
         return self.activation(x)

@@ -95,11 +95,13 @@ def crop(image: tf.Tensor,
     # Clip the boxes to fit inside the crop
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=-1)
     
+    # Cast crop coordinates to float, so they can be used for clipping
     x = tf.cast(x, tf.float32)
     crop_width = tf.cast(crop_width, tf.float32)
     y = tf.cast(y, tf.float32)
     crop_height = tf.cast(crop_height, tf.float32)
     
+    # Adjust boxes coordinates after the crop
     widths = x2 - x1
     heights = y2 - y1
 
@@ -115,7 +117,10 @@ def crop(image: tf.Tensor,
     boxes = tf.reshape(boxes, [-1, 4])
 
     # Create a mask to avoid tiny boxes
+    widths = tf.gather(boxes, 2, axis=-1) - tf.gather(boxes, 0, axis=-1)
+    heights = tf.gather(boxes, 3, axis=-1) - tf.gather(boxes, 1, axis=-1)
     areas = widths * heights
+    
     # Min area is the 1 per cent of the whole area
     min_area = .01 * (crop_height * crop_height)
     large_areas = tf.reshape(tf.greater_equal(areas, min_area), [-1])
@@ -144,8 +149,8 @@ def augment(image: tf.Tensor,
                             lambda: horizontal_flip(image, annots),
                             lambda: no_transform(image, annots))
 
-    # image, annots = tf.cond(tf.random.uniform([1]) < .5,
-    #                         lambda: crop(image, annots),
-    #                         lambda: no_transform(image, annots))
+    image, annots = tf.cond(tf.random.uniform([1]) < .5,
+                            lambda: crop(image, annots),
+                            lambda: no_transform(image, annots))
                             
     return image, annots

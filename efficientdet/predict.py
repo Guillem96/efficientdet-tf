@@ -36,7 +36,9 @@ def main(**kwargs):
                                   training=False)
 
     labels = [classes[l] for l in labels[0]]
-    im = efficientdet.visualizer.draw_boxes(im, boxes[0])
+    scores = scores[0]
+    im = efficientdet.visualizer.draw_boxes(
+        im, boxes[0], labels=labels, scores=scores)
     
     plt.imshow(im)
     plt.axis('off')

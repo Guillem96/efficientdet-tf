@@ -96,7 +96,6 @@ def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor,
 def build_dataset(dataset_path: Union[str, Path],
                   im_input_size: Tuple[int, int],
                   shuffle: bool = True,
-                  batch_size: int = 2,
                   data_augmentation: bool = False) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
@@ -110,8 +109,6 @@ def build_dataset(dataset_path: Union[str, Path],
     im_input_size: Tuple[int, int]
         Model input size. Images will automatically be resized to this
         shape
-    batch_size: int, default 2
-        Training model batch size
     data_augmentation: bool, default False
         Wether or not to apply data augmentation
     Examples
@@ -140,14 +137,14 @@ def build_dataset(dataset_path: Union[str, Path],
     annot_files = sorted(annot_path.glob('*.xml'))
     
     # Partially evaluate image loader to resize images
-    # always with the same shape
-    load_im = partial(io_utils.load_image, im_size=im_input_size)
+    # always with the same shape and normalize them
+    load_im = lambda im, annots: (io_utils.load_image(im, im_input_size, 
+                                                      normalize_image=True),
+                                  annots)
     scale_boxes = partial(_scale_boxes, to_size=im_input_size)
 
     # We assume that tf datasets list files sorted when shuffle=False
-    im_ds = (tf.data.Dataset.list_files(str(im_path / '*.jpg'), 
-                                        shuffle=False)
-             .map(load_im).map(normalize_image))
+    im_ds = tf.data.Dataset.list_files(str(im_path / '*.jpg'), shuffle=False)
     annot_ds = (tf.data.Dataset
                 .from_generator(generator=lambda: _annot_gen(annot_files), 
                                 output_types=(tf.int32, tf.float32))
@@ -155,17 +152,14 @@ def build_dataset(dataset_path: Union[str, Path],
 
     # Join both datasets
     ds = tf.data.Dataset.zip((im_ds, annot_ds))
-    
+
+    # Shuffle before loading the images
+    if shuffle:
+        ds = ds.shuffle(1024)
+
+    ds = ds.map(load_im)
+
     if data_augmentation:
         ds = ds.map(augment)
-
-    if shuffle:
-        ds = ds.shuffle(128)
-    
-    ds = ds.padded_batch(batch_size=batch_size,
-                         padded_shapes=((*im_input_size, 3), 
-                                       ((None,), (None, 4))),
-                         padding_values=(0., (-1, -1.)))
-
     
     return ds

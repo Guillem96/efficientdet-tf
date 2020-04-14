@@ -3,8 +3,8 @@ from typing import List, Union
 
 import tensorflow as tf
 
-import efficientdet.utils as utils
 import efficientdet.config as config
+from efficientdet.utils import anchors, bndbox
 
 from efficientdet import models
 
@@ -54,7 +54,7 @@ class EfficientDet(tf.keras.Model):
         self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
                                                    self.config.Dclass)
 
-        self.anchors_gen = [utils.anchors.AnchorGenerator(
+        self.anchors_gen = [anchors.AnchorGenerator(
             size=self.anchors_config.sizes[i - 3],
             aspect_ratios=self.anchors_config.ratios,
             stride=self.anchors_config.strides[i - 3]
@@ -108,9 +108,9 @@ class EfficientDet(tf.keras.Model):
             bboxes = tf.reshape(bboxes, 
                                 [batch_size, -1, 4])
 
-            boxes = utils.bndbox.regress_bndboxes(anchors, bboxes)
-            boxes = utils.bndbox.clip_boxes(boxes, [h, w])
-            boxes, labels, scores = utils.bndbox.nms(
+            boxes = bndbox.regress_bndboxes(anchors, bboxes)
+            boxes = bndbox.clip_boxes(boxes, [h, w])
+            boxes, labels, scores = bndbox.nms(
                 boxes, class_scores, score_threshold=self.score_threshold)
 
             # TODO: Pad output
@@ -145,7 +145,7 @@ class EfficientDet(tf.keras.Model):
 
         # TODO: Make checkpoint path also a reference to a path.
         # For example: EfficientDet.from_pretrained('voc')        
-        from efficientdet.checkpoint import load
+        from efficientdet.utils.checkpoint import load
 
         if str(checkpoint_path) in AVAILABLE_MODELS:
             checkpoint_path = AVAILABLE_MODELS[checkpoint_path]

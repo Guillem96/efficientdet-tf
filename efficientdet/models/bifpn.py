@@ -73,7 +73,9 @@ class BiFPNBlock(tf.keras.Model):
         self.ff_4_out = FastFusion(3, features)
         self.ff_3_out = FastFusion(2, features)
 
-    def call(self, features, training=True):
+    def call(self, 
+             features: Sequence[tf.Tensor], 
+             training: bool = True) -> Sequence[tf.Tensor]:
         """
         Computes the feature fusion of bottom-up features comming
         from the Backbone NN
@@ -126,7 +128,9 @@ class BiFPN(tf.keras.Model):
 
         self.blocks = [BiFPNBlock(features) for i in range(n_blocks)]
 
-    def call(self, inputs: Sequence[tf.Tensor], training: bool = True):
+    def call(self, 
+             inputs: Sequence[tf.Tensor], 
+             training: bool = True) -> Sequence[tf.Tensor]:
         
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv

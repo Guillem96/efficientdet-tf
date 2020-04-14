@@ -7,8 +7,6 @@ from urllib.parse import urlparse
 
 import tensorflow as tf
 
-from .models import EfficientDet
-
 
 def _md5(fname):
     hash_md5 = hashlib.md5()
@@ -18,7 +16,7 @@ def _md5(fname):
     return base64.b64encode(hash_md5.digest()).decode()
 
 
-def save(model: EfficientDet,
+def save(model: 'EfficientDet',
          parameters: dict,
          save_dir: Union[str, Path],
          to_gcs: bool = False):
@@ -59,7 +57,7 @@ def save(model: EfficientDet,
             f'gs://ml-generic-purpose-tf-models/{prefix}/model.tf')
 
 
-def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
+def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
     """
     Load efficientdet model from google cloud storage or from local
     file.
@@ -106,6 +104,8 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> EfficientDet:
 
     with hp_fname.open() as f:
         hp = json.load(f)
+
+    from efficientdet.models import EfficientDet
 
     model = EfficientDet(
         hp['n_classes'],

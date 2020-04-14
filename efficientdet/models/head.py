@@ -1,5 +1,6 @@
-import tensorflow as tf
 import math
+
+import tensorflow as tf
 
 from . import layers
 from efficientdet.utils import tf_utils
@@ -24,7 +25,7 @@ class RetinaNetBBPredictor(tf.keras.Model):
                                                    kernel_size=3,
                                                    padding='same')
 
-    def call(self, features, training=True):
+    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
 
         x = tf_utils.call_cascade(
@@ -58,10 +59,10 @@ class RetinaNetClassifier(tf.keras.Model):
                                                 padding='same',
                                                 bias_initializer=w_init)
 
-    def call(self, features, training=True):
+    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
+
         x = tf_utils.call_cascade(
             self.feature_extractors, features, training=training)
-        return tf.reshape(self.cls_score(x), 
-                          [batch_size, -1, self.num_classes])
+        return tf.reshape(self.cls_score(x), [batch_size, -1, self.num_classes])
 

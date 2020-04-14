@@ -14,10 +14,6 @@ huber_loss_fn = tf.losses.Huber(
     reduction=tf.losses.Reduction.SUM)
 
 
-def ds_len(ds):
-    return sum(1 for _ in ds)
-
-
 def loss_fn(y_true_clf: tf.Tensor, 
             y_pred_clf: tf.Tensor, 
             y_true_reg: tf.Tensor, 
@@ -115,9 +111,9 @@ def train(**kwargs):
     anchors = generate_anchors(model.anchors_config,
                                model.config.input_size)
     
-    steps_per_epoch = ds_len(ds)
+    steps_per_epoch = sum(1 for _ in ds)
     if val_ds is not None:
-        validation_steps = ds_len(val_ds)
+        validation_steps = sum(1 for _ in val_ds)
 
     if kwargs['w_scheduler']:
         optim_steps = (steps_per_epoch // kwargs['grad_accum_steps']) + 1
@@ -194,6 +190,7 @@ def train(**kwargs):
 @click.option('--alpha', type=float, default=1.,
               help='Proportion to reduce the learning rate during '
                    'the decay period')
+                   
 # Logging parameters
 @click.option('--print-freq', type=int, default=10,
               help='Print training loss every n steps')

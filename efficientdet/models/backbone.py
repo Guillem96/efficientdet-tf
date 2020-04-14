@@ -24,7 +24,7 @@ def build_efficient_net_backbone(B: int = 0,
         EfficientDet with intermediate outputs so later we can
         create an FPN on top of it
     """
-    efficientnet_cls = getattr(efficientnet, f"EfficientNetB{B:d}")
+    efficientnet_cls = getattr(efficientnet, f'EfficientNetB{B:d}')
     base_model = efficientnet_cls(weights=weights, include_top=False)
 
     layers = base_model.layers

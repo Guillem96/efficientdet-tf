@@ -122,8 +122,7 @@ class AnchorGenerator(object):
                      tf.TensorSpec(shape=[None, None], dtype=tf.int32),
                      tf.TensorSpec(shape=None, dtype=tf.int32),
                      tf.TensorSpec(shape=None, dtype=tf.float32),
-                     tf.TensorSpec(shape=None, dtype=tf.float32)]
-)
+                     tf.TensorSpec(shape=None, dtype=tf.float32)])
 def anchor_targets_bbox(anchors: tf.Tensor,
                         images: tf.Tensor,
                         bndboxes: tf.Tensor,

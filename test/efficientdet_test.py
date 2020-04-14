@@ -44,11 +44,9 @@ class EfficientDetTest(unittest.TestCase):
         input_size = model.config.input_size
 
         ds = voc.build_dataset('test/data/VOC2007',
-                               batch_size=batch_size,
                                im_input_size=(input_size, input_size))
-
-        for images, annotations in ds.take(1):
-            boxes, labels = model(images, training=False)
+        images, annotations = next(iter(ds.take(1)))
+        boxes, labels, scores = model(tf.expand_dims(images, 0), training=False)
         
         # TODO: migrate to tensors when output is padded
         for i in range(len(boxes)):
