@@ -66,9 +66,46 @@ def train(**kwargs):
     save_checkpoint_dir = Path(kwargs['save_dir'])
     save_checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
+    config = efficientdet.config.EfficientDetCompudScaling(
+        D=kwargs['efficientdet'])
+
+    anchors = generate_anchors(efficientdet.config.AnchorsConfig(),
+                               config.input_size)
+
+    # Generating datasets
+    ds, class2idx = efficientdet.data.build_ds(
+        format=kwargs['format'],
+        annots_path=kwargs['train_dataset'],
+        images_path=kwargs['images_path'],
+        im_size=(config.input_size,) * 2,
+        class_names=kwargs['classes_names'].split(','),
+        batch_size=kwargs['batch_size'],
+        data_augmentation=True)
+
+    val_ds = None
+    if kwargs['val_dataset']:
+        val_ds, _ = efficientdet.data.build_ds(
+            format=kwargs['format'],
+            annots_path=kwargs['val_dataset'],
+            images_path=kwargs['images_path'],
+            class_names=kwargs['classes_names'].split(','),
+            im_size=(config.input_size,) * 2,
+            shuffle=False,
+            data_augmentation=False,
+            batch_size=max(1, kwargs['batch_size'] // 2))
+
+    steps_per_epoch = sum(1 for _ in ds)
+    if val_ds is not None:
+        validation_steps = sum(1 for _ in val_ds)
+
     if kwargs['checkpoint'] is not None:
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
-        model = efficientdet.checkpoint.load(kwargs['checkpoint'])
+        (model, optimizer), _ = efficientdet.checkpoint.load(
+            kwargs['checkpoint'], load_optimizer=True)
+        for l in model.layers:
+            l.trainable = True
+        model.trainable = True
+
     elif kwargs['from_pretrained'] is not None:
         model = (efficientdet.EfficientDet
                  .from_pretrained(kwargs['from_pretrained'], 
@@ -87,47 +124,21 @@ def train(**kwargs):
             freeze_backbone=kwargs['freeze_backbone'],
             weights='imagenet')
 
-    ds, class2idx = efficientdet.data.build_ds(
-        format=kwargs['format'],
-        annots_path=kwargs['train_dataset'],
-        images_path=kwargs['images_path'],
-        im_size=(model.config.input_size,) * 2,
-        class_names=kwargs['classes_names'].split(','),
-        batch_size=kwargs['batch_size'],
-        data_augmentation=True)
+    # Only recreate optimizer and scheduler if not loading from checkpoint
+    if kwargs['checkpoint'] is None or kwargs['from_pretrained'] is not None:
+        if kwargs['w_scheduler']:
+            optim_steps = (steps_per_epoch // kwargs['grad_accum_steps']) + 1
+            lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
+                kwargs['learning_rate'],
+                warmup_steps=optim_steps,
+                decay_steps=optim_steps * (kwargs['epochs'] - 1),
+                alpha=kwargs['alpha'])
+        else:
+            lr = kwargs['learning_rate']
 
-    val_ds = None
-    if kwargs['val_dataset']:
-        val_ds, _ = efficientdet.data.build_ds(
-            format=kwargs['format'],
-            annots_path=kwargs['val_dataset'],
-            images_path=kwargs['images_path'],
-            class_names=kwargs['classes_names'].split(','),
-            im_size=(model.config.input_size,) * 2,
-            shuffle=False,
-            data_augmentation=False,
-            batch_size=max(1, kwargs['batch_size'] // 2))
-
-    anchors = generate_anchors(model.anchors_config,
-                               model.config.input_size)
-    
-    steps_per_epoch = sum(1 for _ in ds)
-    if val_ds is not None:
-        validation_steps = sum(1 for _ in val_ds)
-
-    if kwargs['w_scheduler']:
-        optim_steps = (steps_per_epoch // kwargs['grad_accum_steps']) + 1
-        lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
-            kwargs['learning_rate'],
-            warmup_steps=optim_steps,
-            decay_steps=optim_steps * (kwargs['epochs'] - 1),
-            alpha=kwargs['alpha'])
-    else:
-        lr = kwargs['learning_rate']
-
-    optimizer = tf.optimizers.SGD(
-        learning_rate=lr,
-        momentum=0.9)
+        optimizer = tf.optimizers.SGD(
+            learning_rate=lr,
+            momentum=0.9)
 
     for epoch in range(kwargs['epochs']):
 
@@ -157,7 +168,8 @@ def train(**kwargs):
         arch = kwargs['efficientdet']
         save_dir = (save_checkpoint_dir / 
                     f'{arch}_{model_type}_{data_format}_{epoch}')
-        efficientdet.checkpoint.save(model, kwargs, save_dir)
+        efficientdet.checkpoint.save(
+            model, kwargs, save_dir, optimizer=optimizer)
 
 
 @click.command()

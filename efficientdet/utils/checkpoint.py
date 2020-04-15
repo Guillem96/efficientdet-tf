@@ -8,6 +8,65 @@ from urllib.parse import urlparse
 import tensorflow as tf
 
 
+def _deserialize_optimizer(optim: dict) -> tf.optimizers.Optimizer:
+    from importlib import import_module
+
+    def import_cls(path):
+        mod, cls_ = path.rsplit('.', 1)
+        mod = import_module(mod)
+        return getattr(mod, cls_)
+
+    optim_cls = import_cls(optim['class_module'])
+
+    if isinstance(optim['config']['learning_rate'], dict):
+        scheduler = optim['config']['learning_rate']
+        scheduler_cls = import_cls(scheduler['class_module'])
+        scheduler = scheduler_cls.from_config(scheduler['config'])
+        optim['config']['learning_rate'] = scheduler
+    
+    optim_instance = optim_cls(**optim['config'])
+    # for n, v in optim['weights'].items():
+    #     optim_instance._set_hyper(n, v)
+    # optim_instance._create_hypers()
+    optim_instance.iterations = tf.Variable(optim['iterations'], 
+                                            trainable=False)
+    # optim_instance.set_weights([v for n, v in optim['weights'].items()])
+    return optim_instance
+
+
+def _serialize_optimizer(optim: tf.optimizers.Optimizer) -> dict:
+    def get_import_path(o):
+        module = o.__class__.__module__
+        name = o.__class__.__name__
+        return f'{module}.{name}'
+
+    config = optim.get_config()
+    import_path = get_import_path(optim)
+    
+    if isinstance(config['learning_rate'], dict):
+        # Serialize scheduler
+        scheduler = optim.learning_rate
+        scheduler_config = scheduler.get_config()
+        scheduler_serialized = dict(
+            class_module=get_import_path(scheduler),
+            config=scheduler_config)
+        config['learning_rate'] = scheduler_serialized
+    
+    symbolic_weights = getattr(optim, 'weights')
+    
+    # weight_names = [str(w.name) for w in symbolic_weights]
+    # weight_values = tf.keras.backend.batch_get_value(symbolic_weights)
+    # optim_weights = {n: v.tolist() 
+    #                  for n, v in zip(weight_names, weight_values)}
+
+    return dict(
+        class_module=import_path,
+        config=config,
+        iterations=int(optim.iterations),
+        # weights=optim_weights
+    )
+
+
 def _md5(fname):
     hash_md5 = hashlib.md5()
     with open(str(fname), "rb") as f:
@@ -19,6 +78,7 @@ def _md5(fname):
 def save(model: 'EfficientDet',
          parameters: dict,
          save_dir: Union[str, Path],
+         optimizer: tf.optimizers.Optimizer = None,
          to_gcs: bool = False):
     """
     Keras model checkpointing with extra functionalities
@@ -31,6 +91,8 @@ def save(model: 'EfficientDet',
         Dictionary containing the CLI arguments used to train the model
     save_dir: Union[str, Path]
         Directory to store the model
+    optimizer: tf.optimizers.Optimizer, default None
+        If left to none the optimizer won't be serialized
     to_gcs: bool, default False
         Wether or not to store the model on google cloud too
     """
@@ -43,6 +105,11 @@ def save(model: 'EfficientDet',
     json.dump(parameters, hp_fname.open('w'))
     model.save_weights(str(model_fname))
 
+    if optimizer is not None:
+        optimizer_fname = save_dir / 'optimizer.json'
+        optimizer_ser = _serialize_optimizer(optimizer)
+        json.dump(optimizer_ser, optimizer_fname.open('w'))
+    
     if to_gcs:
         from google.cloud import storage
 
@@ -53,11 +120,17 @@ def save(model: 'EfficientDet',
         blob = bucket.blob(f'{prefix}/hp.json')
         blob.upload_from_filename(str(hp_fname))
 
+        if optimizer is not None:
+            blob = bucket.blob(f'{prefix}/optimizer.json')
+            blob.upload_from_filename(str(optimizer_fname))
+
         model.save_weights(
             f'gs://ml-generic-purpose-tf-models/{prefix}/model.tf')
 
 
-def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
+def load(save_dir_or_url: Union[str, Path], 
+         load_optimizer: bool = False,
+         **kwargs) -> 'EfficientDet':
     """
     Load efficientdet model from google cloud storage or from local
     file.
@@ -84,6 +157,7 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
 
         hp_fname = save_dir / 'hp.json'
         model_path = save_dir / 'model.tf'
+        optimizer_fname = save_dir / 'optimizer.json'
 
         hp_blob = bucket.blob(prefix + 'hp.json')
         hp_blob.reload()
@@ -99,6 +173,7 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
     else:
         hp_fname = Path(save_dir_or_url) / 'hp.json'
         model_path = Path(save_dir_or_url) / 'model.tf'
+        optimizer_fname = Path(save_dir_or_url) / 'optimizer.json'
 
     assert hp_fname.exists()
 
@@ -120,6 +195,15 @@ def load(save_dir_or_url: Union[str, Path], **kwargs) -> 'EfficientDet':
     for l in model.layers:
         l.trainable = False
     model.trainable = False
-    
+
+    if load_optimizer:
+        assert optimizer_fname.exists()
+
+        with optimizer_fname.open() as f:
+            optim_config = json.load(f)
+        
+        optimizer = _deserialize_optimizer(optim_config)
+        return (model, optimizer), hp
+        
     return model, hp
     
