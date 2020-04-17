@@ -5,7 +5,19 @@ from pathlib import Path
 from typing import Union
 from urllib.parse import urlparse
 
+import numpy as np
 import tensorflow as tf
+
+
+def _serialize_value(value):
+    if tf.is_tensor(value):
+        return value.numpy().item()
+    
+    if isinstance(value, (np.ndarray, np.float64, 
+                          np.float32, np.int32, np.int64)):
+        return value.item()
+    
+    return value
 
 
 def _deserialize_optimizer(optim: dict) -> tf.optimizers.Optimizer:
@@ -47,22 +59,24 @@ def _serialize_optimizer(optim: tf.optimizers.Optimizer) -> dict:
         # Serialize scheduler
         scheduler = optim.learning_rate
         scheduler_config = scheduler.get_config()
+        scheduler_config = {k: _serialize_value(v) 
+                            for k, v in scheduler_config.items()}
         scheduler_serialized = dict(
             class_module=get_import_path(scheduler),
             config=scheduler_config)
         config['learning_rate'] = scheduler_serialized
     
-    symbolic_weights = getattr(optim, 'weights')
-    
+    # symbolic_weights = getattr(optim, 'weights')
     # weight_names = [str(w.name) for w in symbolic_weights]
     # weight_values = tf.keras.backend.batch_get_value(symbolic_weights)
     # optim_weights = {n: v.tolist() 
     #                  for n, v in zip(weight_names, weight_values)}
 
+    config = {k: _serialize_value(v) for k, v in config.items()}
     return dict(
         class_module=import_path,
         config=config,
-        iterations=int(optim.iterations),
+        iterations=_serialize_value(optim.iterations),
         # weights=optim_weights
     )
 
@@ -108,7 +122,14 @@ def save(model: 'EfficientDet',
     if optimizer is not None:
         optimizer_fname = save_dir / 'optimizer.json'
         optimizer_ser = _serialize_optimizer(optimizer)
-        json.dump(optimizer_ser, optimizer_fname.open('w'))
+        for k, v in optimizer_ser.items():
+            if isinstance(v, dict):
+                for k1, v1 in v.items():
+                    print(k1, v1, type(v1))
+            else: 
+                print(k, v, type(v))
+
+        json.dump(str(optimizer_ser), optimizer_fname.open('w'))
     
     if to_gcs:
         from google.cloud import storage
