@@ -24,7 +24,8 @@ $pip install git+https://github.com/Guillem96/efficientdet-tf
 
 ## Training the model
 
-Currenty this EfficientDet implementation supports training with 2 data formats:
+Currenty this EfficientDet implementation supports training with 2 data formats
+and automatically train with VOC2007:
 
 - **labelme format**. This format corresponds to the [labelme](https://github.com/wkentaro/labelme)
 annotations outputs.
@@ -32,6 +33,12 @@ annotations outputs.
 - **VOC2007 format**. The format corresponds to the one described [here](http://host.robots.ox.ac.uk/pascal/VOC/voc2007/).
 
 You can specify the data model on the training command.
+Also you can efficiently train your model on VOC2007 with the VOC command of 
+the `efficientdet.train` script as follows:
+
+```bash
+$ python efficientdet.train <efficientdet and train params> VOC
+```
 
 ### Training With Command Line Interface (CLI)
 
@@ -86,23 +93,15 @@ the data coming from [here](https://github.com/Guillem96/efficientdet-tf/tree/ma
 
 ```
 $ python -m efficientdet.train \
-    --efficientdet 0 \
-    --bidirectional \
-    --no-freeze-backbone \
-
-    --format labelme \
-    --train-dataset test/data/pokemon \
-    --images-path test/data/pokemon \
-    --classes-names treecko,greninja,mewtwo,solgaleo,psyduck \
-    --n-classes 5 \
-    
-    --epochs 20 \
-    --batch-size 8 \
-    --w-scheduler \
-    --learning-rate 1e-2 \
-    --grad-accum-steps 2 \
-
-    --save-dir models/pokemon-models/
+  
+  --efficientdet 0 
+  --learning-rate 1e-2 
+  --save-dir models/pokemon \ 
+  
+  labelme \
+  --train-dataset test/data/pokemon/ \
+  --images-path test/data/pokemon/ \
+  --classes-file test/data/pokemon/classes.names 
 ```
 
 ### Train the model with VOC 2007 format

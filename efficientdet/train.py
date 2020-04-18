@@ -1,5 +1,5 @@
-from typing import Tuple
 from pathlib import Path
+from typing import Tuple, Mapping
 
 import click
 
@@ -62,37 +62,13 @@ def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
     return tf.concat(anchors, axis=0)
 
 
-def train(**kwargs):
-    save_checkpoint_dir = Path(kwargs['save_dir'])
-    save_checkpoint_dir.mkdir(exist_ok=True, parents=True)
-
-    config = efficientdet.config.EfficientDetCompudScaling(
-        D=kwargs['efficientdet'])
-
-    anchors = generate_anchors(efficientdet.config.AnchorsConfig(),
-                               config.input_size)
-
-    # Generating datasets
-    ds, class2idx = efficientdet.data.build_ds(
-        format=kwargs['format'],
-        annots_path=kwargs['train_dataset'],
-        images_path=kwargs['images_path'],
-        im_size=(config.input_size,) * 2,
-        class_names=kwargs['classes_names'].split(','),
-        batch_size=kwargs['batch_size'],
-        data_augmentation=True)
-
-    val_ds = None
-    if kwargs['val_dataset']:
-        val_ds, _ = efficientdet.data.build_ds(
-            format=kwargs['format'],
-            annots_path=kwargs['val_dataset'],
-            images_path=kwargs['images_path'],
-            class_names=kwargs['classes_names'].split(','),
-            im_size=(config.input_size,) * 2,
-            shuffle=False,
-            data_augmentation=False,
-            batch_size=max(1, kwargs['batch_size'] // 2))
+def train(config: efficientdet.config.EfficientDetCompudScaling, 
+          save_checkpoint_dir: Path, 
+          anchors: tf.Tensor, 
+          ds: tf.data.Dataset, 
+          val_ds: tf.data.Dataset,
+          class2idx: Mapping[str, int] ,
+          **kwargs):
 
     steps_per_epoch = sum(1 for _ in ds)
     if val_ds is not None:
@@ -109,7 +85,7 @@ def train(**kwargs):
     elif kwargs['from_pretrained'] is not None:
         model = (efficientdet.EfficientDet
                  .from_pretrained(kwargs['from_pretrained'], 
-                                  num_classes=kwargs['n_classes']))
+                                  num_classes=len(class2idx)))
         for l in model.layers:
             l.trainable = True
         model.trainable = True
@@ -118,7 +94,7 @@ def train(**kwargs):
               ' using the defined in the pretrained model.')
     else:
         model = efficientdet.models.EfficientDet(
-            kwargs['n_classes'],
+            len(class2idx),
             D=kwargs['efficientdet'],
             bidirectional=kwargs['bidirectional'],
             freeze_backbone=kwargs['freeze_backbone'],
@@ -149,7 +125,7 @@ def train(**kwargs):
             optimizer=optimizer,
             grad_accum_steps=kwargs['grad_accum_steps'],
             loss_fn=loss_fn,
-            num_classes=kwargs['n_classes'],
+            num_classes=len(class2idx),
             epoch=epoch,
             steps=steps_per_epoch,
             print_every=kwargs['print_freq'])
@@ -164,15 +140,15 @@ def train(**kwargs):
                 class2idx=class2idx)
         
         model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
-        data_format = kwargs['format']
         arch = kwargs['efficientdet']
         save_dir = (save_checkpoint_dir / 
-                    f'{arch}_{model_type}_{data_format}_{epoch}')
+                    f'{arch}_{model_type}_{epoch}')
+        kwargs['n_classes'] = len(class2idx)
         efficientdet.checkpoint.save(
             model, kwargs, save_dir, optimizer=optimizer)
 
 
-@click.command()
+@click.group()
 
 # Neural network parameters
 @click.option('--efficientdet', type=int, default=0,
@@ -183,6 +159,12 @@ def train(**kwargs):
                    'a "normal" retinanet, otherwise as EfficientDet')
 @click.option('--freeze-backbone/--no-freeze-backbone', 
               default=False, help='Wether or not freeze EfficientNet backbone')
+
+# Logging parameters
+@click.option('--print-freq', type=int, default=10,
+              help='Print training loss every n steps')
+@click.option('--validate-freq', type=int, default=3,
+              help='Print COCO evaluations every n epochs')
 
 # Training parameters
 @click.option('--epochs', type=int, default=20,
@@ -199,37 +181,9 @@ def train(**kwargs):
 @click.option('--w-scheduler/--wo-scheduler', default=True,
               help='With learning rate scheduler or not. If left to true, '
                    '--learning-rate option will act as max lr for the scheduler')
-@click.option('--alpha', type=float, default=1.,
+@click.option('--alpha', type=float, default=0.,
               help='Proportion to reduce the learning rate during '
                    'the decay period')
-                   
-# Logging parameters
-@click.option('--print-freq', type=int, default=10,
-              help='Print training loss every n steps')
-@click.option('--validate-freq', type=int, default=3,
-              help='Print COCO evaluations every n epochs')
-
-# Data parameters
-@click.option('--format', type=click.Choice(['VOC', 'labelme']),
-              required=True, help='Dataset to use for training')
-@click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
-              required=True, help='Path to annotations and images')
-@click.option('--val-dataset', default='', 
-              type=click.Path(file_okay=False),
-              help='Path to validation annotations. If it is '
-                   ' not set by the user, validation won\'t be performed')
-@click.option('--images-path', type=click.Path(file_okay=False),
-              required=True, default='',
-              help='Base path to images. '
-                   'Required when using labelme format')
-@click.option('--n-classes', type=int, required=True,
-              help='Number of important classes without '
-                   'taking background into account')
-@click.option('--classes-names', 
-              default='', type=str, 
-              help='Only required when format is labelme. '
-                   'Name of classes separated using comma. '
-                   'class1,class2,class3')
 
 # Checkpointing parameters
 @click.option('--checkpoint', help='Path to model checkpoint',
@@ -242,8 +196,125 @@ def train(**kwargs):
 @click.option('--save-dir', help='Directory to save model weights',
               required=True, default='models', 
               type=click.Path(file_okay=False))
-def main(**kwargs):
-    train(**kwargs)
+
+@click.pass_context
+def main(ctx, **kwargs):
+    ctx.ensure_object(dict)
+
+    save_checkpoint_dir = Path(kwargs['save_dir'])
+    save_checkpoint_dir.mkdir(exist_ok=True, parents=True)
+
+    config = efficientdet.config.EfficientDetCompudScaling(
+        D=kwargs['efficientdet'])
+
+    anchors = generate_anchors(efficientdet.config.AnchorsConfig(),
+                               config.input_size)
+
+    ctx.obj['common'] = kwargs
+    ctx.obj['config'] = config
+    ctx.obj['anchors'] = anchors
+    ctx.obj['save_checkpoint_dir'] = save_checkpoint_dir
+
+
+@main.command(name='VOC')
+@click.option('--train-dataset', type=click.Path(file_okay=False),
+              help='Path to save the dataset. Useful to set a google cloud '
+                   'bucket to later train with TPUs')
+@click.pass_context
+def VOC(ctx, **kwargs):
+    kwargs.update(ctx.obj['common'])
+
+    config, anchors = ctx.obj['config'], ctx.obj['anchors']
+    save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
+
+    class2idx = efficientdet.data.voc.LABEL_2_IDX
+    im_size = (config.input_size,) * 2
+    train_ds = efficientdet.data.voc.build_dataset(
+        kwargs.get('train_dataset', None),
+        im_size,
+        'train',
+        shuffle=True, 
+        data_augmentation=True)
+    
+    valid_ds = efficientdet.data.voc.build_dataset(
+        kwargs.get('train_dataset', None),
+        im_size,
+        'validation',
+        shuffle=False, 
+        data_augmentation=False)
+    
+    train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
+                                     padded_shapes=((*im_size, 3), 
+                                                    ((None,), (None, 4))),
+                                     padding_values=(0., (-1, -1.)))
+
+    valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
+                                     padded_shapes=((*im_size, 3), 
+                                                    ((None,), (None, 4))),
+                                     padding_values=(0., (-1, -1.)))
+
+    train(config, save_checkpoint_dir, 
+          anchors, train_ds, valid_ds, class2idx, **kwargs)
+
+
+@main.command()
+
+@click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
+              required=True, help='Path to train  annotations')
+@click.option('--val-dataset', default=None, 
+              type=click.Path(file_okay=False),
+              help='Path to validation annotations. If it is '
+                   ' not set by the user, validation won\'t be performed')
+@click.option('--images-path', type=click.Path(file_okay=False, exists=True),
+              required=True, 
+              help='Base path to images. '
+                   'Required when using labelme format')
+@click.option('--classes-file', type=click.Path(dir_okay=False, exists=True), 
+              required=True,
+              help='path to file containing a class for line')
+
+@click.pass_context
+def labelme(ctx, **kwargs):
+    kwargs.update(ctx.obj['common'])
+    
+    config, anchors = ctx.obj['config'], ctx.obj['anchors']
+    save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
+
+    classes, class2idx = efficientdet.utils.io.read_class_names(
+        kwargs['classes_file'])
+
+    im_size = (config.input_size,) * 2
+
+    train_ds = efficientdet.data.labelme.build_dataset(
+        annotations_path=kwargs['train_dataset'],
+        images_path=kwargs['images_path'],
+        class2idx=class2idx,
+        im_input_size=im_size,
+        shuffle=True,
+        data_augmentation=True)
+    
+    train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
+                                     padded_shapes=((*im_size, 3), 
+                                                    ((None,), (None, 4))),
+                                     padding_values=(0., (-1, -1.)))
+
+    valid_ds = None
+    if kwargs['val_dataset']:
+        valid_ds = efficientdet.data.labelme.build_dataset(
+            annotations_path=kwargs['val_dataset'],
+            images_path=kwargs['images_path'],
+            class2idx=class2idx,
+            im_input_size=im_size,
+            shuffle=False,
+            data_augmentation=False)
+        
+        valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
+                                         padded_shapes=((*im_size, 3), 
+                                                        ((None,), (None, 4))),
+                                         padding_values=(0., (-1, -1.)))
+
+    train(config, save_checkpoint_dir, 
+          anchors, train_ds, valid_ds, class2idx, **kwargs)
 
 
 if __name__ == "__main__":

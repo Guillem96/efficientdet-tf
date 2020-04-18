@@ -4,6 +4,14 @@ from typing import Tuple, List, Union
 import tensorflow as tf
 
 
+def to_tf_format(boxes: tf.Tensor):
+    """
+    Convert xmin, ymin, xmax, ymax boxes to ymin, xmin, ymax, xmax
+    and viceversa
+    """
+    y1, x1, y2, x2 = tf.split(boxes, 4, axis=-1)
+    return tf.concat([x1, y1, x2, y2], axis=-1)
+
 def scale_boxes(boxes: tf.Tensor,
                 from_size: Tuple[int, int],
                 to_size: Tuple[int, int]) -> tf.Tensor:
@@ -171,10 +179,7 @@ def nms(boxes: tf.Tensor,
                    tf.TensorShape([None]), tf.TensorShape([None])]
 
     boxes = tf.cast(boxes, tf.float32)
-    x1, y1, x2, y2 = tf.split(boxes, 4, axis=-1)
-    boxes = tf.stack([y1, x1, y2, x2], axis=-1)
-    boxes = tf.reshape(boxes, [batch_size, -1, 4])
-
+    boxes = to_tf_format(boxes)
     class_scores = tf.cast(class_scores, tf.float32)
     
     all_boxes = []
@@ -194,9 +199,7 @@ def nms(boxes: tf.Tensor,
             loop_vars=[c, batch_boxes, batch_scores, batch_labels],
             shape_invariants=loop_shapes)
 
-        y1, x1, y2, x2 = tf.split(batch_boxes, 4, axis=-1)
-        batch_boxes = tf.stack([x1, y1, x2, y2], axis=-1)
-        batch_boxes = tf.reshape(batch_boxes, [-1, 4])
+        batch_boxes = to_tf_format(batch_boxes)
                 
         all_boxes.append(batch_boxes)
         all_scores.append(batch_scores)

@@ -122,14 +122,7 @@ def save(model: 'EfficientDet',
     if optimizer is not None:
         optimizer_fname = save_dir / 'optimizer.json'
         optimizer_ser = _serialize_optimizer(optimizer)
-        for k, v in optimizer_ser.items():
-            if isinstance(v, dict):
-                for k1, v1 in v.items():
-                    print(k1, v1, type(v1))
-            else: 
-                print(k, v, type(v))
-
-        json.dump(str(optimizer_ser), optimizer_fname.open('w'))
+        json.dump(optimizer_ser, optimizer_fname.open('w'))
     
     if to_gcs:
         from google.cloud import storage
@@ -149,6 +142,36 @@ def save(model: 'EfficientDet',
             f'gs://ml-generic-purpose-tf-models/{prefix}/model.tf')
 
 
+def download_folder(gs_path: str) -> str:
+    from google import auth
+    from google.cloud import storage
+
+    save_dir_url = urlparse(str(gs_path))
+    assert save_dir_url.scheme == 'gs'
+
+    save_dir = Path.home() / '.effdet-checkpoints' / save_dir_url.path[1:]
+    save_dir.mkdir(exist_ok=True, parents=True)
+    
+    client = storage.Client(
+        project='ml-generic-purpose',
+        credentials=auth.credentials.AnonymousCredentials())
+    bucket = client.bucket('ml-generic-purpose-tf-models')
+
+    prefix = save_dir_url.path[1:] + '/'
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    for blob in blobs:
+        blob.reload()
+        name = blob.name.replace(prefix, '')
+        fname = save_dir / name
+        fname.parent.mkdir(parents=True, exist_ok=True)
+        if not fname.exists() or (fname.exists() and 
+                                    _md5(fname) != blob.md5_hash):
+            blob.download_to_filename(fname)
+
+    return save_dir
+
+
 def load(save_dir_or_url: Union[str, Path], 
          load_optimizer: bool = False,
          **kwargs) -> 'EfficientDet':
@@ -162,35 +185,12 @@ def load(save_dir_or_url: Union[str, Path],
     save_dir_url = urlparse(str(save_dir_or_url))
 
     if save_dir_url.scheme == 'gs':
-        from google import auth
-        from google.cloud import storage
-
-        save_dir = Path.home() / '.effdet-checkpoints'
-        save_dir.mkdir(exist_ok=True, parents=True)
-        
-        client = storage.Client(
-            project='ml-generic-purpose',
-            credentials=auth.credentials.AnonymousCredentials())
-        bucket = client.bucket('ml-generic-purpose-tf-models')
-
-        prefix = save_dir_url.path[1:] + '/'
-        blobs = bucket.list_blobs(prefix=prefix)
+        save_dir = download_folder(save_dir_or_url)
 
         hp_fname = save_dir / 'hp.json'
         model_path = save_dir / 'model.tf'
         optimizer_fname = save_dir / 'optimizer.json'
 
-        hp_blob = bucket.blob(prefix + 'hp.json')
-        hp_blob.reload()
-
-        if hp_fname.exists() and _md5(hp_fname) != hp_blob.md5_hash:
-            for blob in blobs:
-                fname = save_dir / blob.name.replace(prefix, '')
-                blob.download_to_filename(fname)
-        elif not hp_fname.exists():
-            for blob in blobs:
-                fname = save_dir / blob.name.replace(prefix, '')
-                blob.download_to_filename(fname)
     else:
         hp_fname = Path(save_dir_or_url) / 'hp.json'
         model_path = Path(save_dir_or_url) / 'model.tf'
