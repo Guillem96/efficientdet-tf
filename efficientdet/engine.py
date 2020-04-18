@@ -77,9 +77,9 @@ def train_single_epoch(model: tf.keras.Model,
             images=images, r_targets=target_reg, c_targets=target_clf)
         
         if tf.math.is_nan(reg_loss) or tf.math.is_nan(clf_loss):
-            print('Found nan while training, continue to next step')
+            print('Loss NaN, skipping training step')
             continue
-
+        
         if len(acc_gradients) == 0:
             acc_gradients = grads 
         else:
