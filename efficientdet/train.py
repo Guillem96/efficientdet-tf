@@ -203,7 +203,7 @@ def train(**kwargs):
 @click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
 @click.option('--val-dataset', default='', 
-              type=click.Path(file_okay=False, exists=True),
+              type=click.Path(file_okay=False),
               help='Path to validation annotations. If it is '
                    ' not set by the user, validation won\'t be performed')
 @click.option('--images-path', type=click.Path(file_okay=False),
