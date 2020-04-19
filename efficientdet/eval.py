@@ -1,7 +1,7 @@
 import click
 
 import efficientdet
-import efficientdet.engine as engine
+from efficientdet import coco
 
 
 @click.group()
@@ -13,7 +13,8 @@ import efficientdet.engine as engine
 @click.pass_context
 def main(ctx, **kwargs):
 
-    model, params = efficientdet.checkpoint.load(kwargs['checkpoint'])
+    model, params = efficientdet.checkpoint.load(
+        kwargs['checkpoint'])
 
     ctx.ensure_object(dict)
     ctx.obj['common'] = kwargs
@@ -55,7 +56,7 @@ def labelme(ctx, **kwargs):
                                         ((None,), (None, 4))),
                          padding_values=(0., (-1, -1.)))
 
-    engine.evaluate(
+    coco.evaluate(
         model=model,
         dataset=ds,
         steps=sum(1 for _ in ds),
@@ -84,7 +85,7 @@ def VOC(ctx, **kwargs):
                                         ((None,), (None, 4))),
                          padding_values=(0., (-1, -1.)))
 
-    engine.evaluate(
+    coco.evaluate(
         model=model,
         dataset=ds,
         steps=sum(1 for _ in ds),

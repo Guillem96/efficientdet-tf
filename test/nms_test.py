@@ -4,8 +4,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 import efficientdet.utils as utils
-import efficientdet.data.voc as voc
 import efficientdet.config as config
+import efficientdet.data.labelme as labelme
 import efficientdet.utils.bndbox as bb_utils
 
 anchors_config = config.AnchorsConfig()
@@ -14,11 +14,15 @@ anchors_config = config.AnchorsConfig()
 class NMSTest(unittest.TestCase):
 
     def test_nms(self):
-        n_classes = len(voc.LABEL_2_IDX)
         anchors_config = config.AnchorsConfig()
 
-        ds = voc.build_dataset('test/data/VOC2007',
-                               im_input_size=(512, 512))
+        classes, class2idx = utils.io.read_class_names(
+            'test/data/pokemon/classes.names') 
+        n_classes = len(classes)
+        ds = labelme.build_dataset('test/data/pokemon',
+                                   'test/data/pokemon',
+                                   class2idx=class2idx,
+                                   im_input_size=(512, 512))
         
         anchors_gen = [utils.anchors.AnchorGenerator(
             size=anchors_config.sizes[i - 3],

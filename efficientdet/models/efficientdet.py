@@ -27,12 +27,22 @@ class EfficientDet(tf.keras.Model):
         EfficientDet architecture based on a compound scaling,
         to better understand this parameter refer to EfficientDet 
         paper 4.2 section
+    bidirectional: bool, default True
+        Use biFPN as feature extractor or FPN. If the value is set to True, then
+        a biFPN will be used
     freeze_backbone: bool, default False
+        Wether to freeze the efficientnet backbone or not
+    score_threshold: float, default 0.1
+        Score threshold to give a prediction as valid
     weights: str, default 'imagenet'
         If set to 'imagenet' then the backbone will be pretrained
         on imagenet. If set to None, the backbone and the bifpn will be random
         initialized. If set to other value, both the backbone and bifpn
         will be initialized with pretrained weights
+    training_mode: bool, default False
+        If set to True, an extra layer is going to be appended on top of the 
+        model. This layer will take care of regress and filter detections.
+        Set to True when using model on inference. 
     """
     def __init__(self, 
                  num_classes: int = None,
@@ -41,7 +51,8 @@ class EfficientDet(tf.keras.Model):
                  freeze_backbone: bool = False,
                  score_threshold: float = .1,
                  weights : str = 'imagenet',
-                 custom_head_classifier: bool = False):
+                 custom_head_classifier: bool = False,
+                 training_mode: bool = False):
                  
         super(EfficientDet, self).__init__()
 
@@ -90,7 +101,6 @@ class EfficientDet(tf.keras.Model):
 
         # Declare the model architecture
         self.config = config.EfficientDetCompudScaling(D=D)
-        self.anchors_config = config.AnchorsConfig()
         
         # Setup efficientnet backbone
         backbone_weights = 'imagenet' if weights == 'imagenet' else None
@@ -115,15 +125,13 @@ class EfficientDet(tf.keras.Model):
         self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
                                                    self.config.Dclass)
         
+        self.training_mode = training_mode
+
         # Inference variables, won't be used during training
-        self.anchors_gen = [anchors.AnchorGenerator(
-            size=self.anchors_config.sizes[i - 3],
-            aspect_ratios=self.anchors_config.ratios,
-            stride=self.anchors_config.strides[i - 3]
-        ) for i in range(3, 8)] # 3 to 7 pyramid levels
+        self.filter_detections = models.layers.FilterDetections(
+            config.AnchorsConfig(), score_threshold)
 
-        self.score_threshold = score_threshold
-
+                    
         # Load the weights if needed
         if weights is not None and weights != 'imagenet':
             self.load_weights(str(save_dir / 'model.tf'))
@@ -145,50 +153,30 @@ class EfficientDet(tf.keras.Model):
             Wether if model is training or it is in inference mode
 
         """
+        training = training and self.training_mode
         features = self.backbone(images, training=training)
         
         # List of [BATCH, H, W, C]
         bifnp_features = self.neck(features, training=training)
 
-        # List of [BATCH, A * 4]
+        # List of [BATCH, A, 4]
         bboxes = [self.bb_head(bf, training=training) 
                   for bf in bifnp_features]
 
-        # List of [BATCH, A * num_classes]
+        # List of [BATCH, A, num_classes]
         class_scores = [self.class_head(bf, training=training) 
                         for bf in bifnp_features]
 
-        # [BATCH, H, W, A * 4]
+        # [BATCH, -1, 4]
         bboxes = tf.concat(bboxes, axis=1)
+
+        # [BATCH, -1, num_classes]
         class_scores = tf.concat(class_scores, axis=1)
 
-        if training:
+        if self.training_mode:
             return bboxes, class_scores
-
         else:
-            im_shape = tf.shape(images)
-            batch_size, h, w = im_shape[0], im_shape[1], im_shape[2]
-            
-            # Create the anchors
-            anchors = [g(tf.shape(f[0]))
-                       for g, f in zip(self.anchors_gen, bifnp_features)]
-            anchors = tf.concat(anchors, axis=0)
-            
-            # Tile anchors over batches, so they can be regressed
-            anchors = tf.tile(tf.expand_dims(anchors, 0), [batch_size, 1, 1])
-            
-            class_scores = tf.reshape(class_scores, 
-                                      [batch_size, -1, self.num_classes])
-            bboxes = tf.reshape(bboxes, 
-                                [batch_size, -1, 4])
-
-            boxes = bndbox.regress_bndboxes(anchors, bboxes)
-            boxes = bndbox.clip_boxes(boxes, [h, w])
-            boxes, labels, scores = bndbox.nms(
-                boxes, class_scores, score_threshold=self.score_threshold)
-
-            # TODO: Pad output
-            return boxes, labels, scores
+            return self.filter_detections(images, bboxes, class_scores)
     
     @staticmethod
     def from_pretrained(checkpoint_path: Union[Path, str], 

@@ -1,3 +1,4 @@
+import functools
 from pathlib import Path
 from typing import Tuple, Mapping
 
@@ -6,43 +7,40 @@ import click
 import tensorflow as tf
 
 import efficientdet
+from efficientdet import coco
 import efficientdet.utils as utils
-import efficientdet.engine as engine
+from .callbacks import COCOmAPCallback
 
 
-huber_loss_fn = tf.losses.Huber(
-    reduction=tf.losses.Reduction.SUM)
-
-
-def loss_fn(y_true_clf: tf.Tensor, 
-            y_pred_clf: tf.Tensor, 
-            y_true_reg: tf.Tensor, 
-            y_pred_reg: tf.Tensor) -> Tuple[float, float]:
-
-    y_shape = tf.shape(y_true_clf)
+def masked_loss(y_true, y_pred, loss_fn, **kwargs):
+    y_shape = tf.shape(y_true)
     batch = y_shape[0]
     n_anchors = y_shape[1]
-    
-    anchors_states = y_true_clf[:, :, -1]
+
+    anchors_states = y_true[:, :, -1]
     not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
     true_idx = tf.where(tf.equal(anchors_states, 1.))
-    
+
     normalizer = tf.shape(true_idx)[0]
     normalizer = tf.cast(normalizer, tf.float32)
-    
-    y_true_clf = tf.gather_nd(y_true_clf[:, :, :-1], not_ignore_idx)
-    y_pred_clf = tf.gather_nd(y_pred_clf, not_ignore_idx)
-    
-    y_true_reg = tf.gather_nd(y_true_reg[:, :, :-1], true_idx)
-    y_pred_reg = tf.gather_nd(y_pred_reg, true_idx)
-    
-    reg_loss = huber_loss_fn(y_true_reg, y_pred_reg)
 
-    clf_loss = efficientdet.losses.focal_loss(y_true_clf, 
-                                              y_pred_clf,
-                                              reduction='sum')
+    y_true = tf.gather_nd(y_true[:, :, :-1], true_idx)
+    y_pred = tf.gather_nd(y_pred, true_idx)
 
-    return tf.divide(reg_loss, normalizer), tf.divide(clf_loss, normalizer)
+    return tf.divide(loss_fn(y_true, y_pred), normalizer)
+
+
+def compute_gt(images: tf.Tensor, 
+               annots: Tuple[tf.Tensor, tf.Tensor], 
+               anchors: tf.Tensor,
+               num_classes: int) -> tf.data.Dataset:
+    labels = annots[0]
+    boxes = annots[1]
+
+    target_reg, target_clf = utils.anchors.anchor_targets_bbox(
+            anchors, images, boxes, labels, num_classes)
+
+    return images, (target_reg, target_clf)
 
 
 def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
@@ -77,18 +75,20 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     if kwargs['checkpoint'] is not None:
         print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
         (model, optimizer), _ = efficientdet.checkpoint.load(
-            kwargs['checkpoint'], load_optimizer=True)
+            kwargs['checkpoint'], load_optimizer=True, training_mode=True)
+
         for l in model.layers:
             l.trainable = True
         model.trainable = True
 
     elif kwargs['from_pretrained'] is not None:
-        model = (efficientdet.EfficientDet
-                 .from_pretrained(kwargs['from_pretrained'], 
-                                  num_classes=len(class2idx)))
-        for l in model.layers:
-            l.trainable = True
-        model.trainable = True
+        model = efficientdet.EfficientDet(
+            weights=kwargs['from_pretrained'],
+            num_classes=len(class2idx),
+            custom_head_classifier=True,
+            freeze_backbone=kwargs['freeze_backbone'],
+            training_mode=True)
+
         print('Training from a pretrained model...')
         print('This will override any configuration related to EfficientNet'
               ' using the defined in the pretrained model.')
@@ -98,12 +98,13 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             D=kwargs['efficientdet'],
             bidirectional=kwargs['bidirectional'],
             freeze_backbone=kwargs['freeze_backbone'],
-            weights='imagenet')
+            weights='imagenet',
+            training_mode=True)
 
     # Only recreate optimizer and scheduler if not loading from checkpoint
     if kwargs['checkpoint'] is None or kwargs['from_pretrained'] is not None:
         if kwargs['w_scheduler']:
-            optim_steps = (steps_per_epoch // kwargs['grad_accum_steps']) + 1
+            optim_steps = (steps_per_epoch // kwargs['grad_accum_steps'])
             lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
                 kwargs['learning_rate'],
                 warmup_steps=optim_steps,
@@ -116,36 +117,76 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             learning_rate=lr,
             momentum=0.9)
 
-    for epoch in range(kwargs['epochs']):
+    # Declare loss functions
+    huber_loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
+    regression_loss_fn = functools.partial(masked_loss, loss_fn=huber_loss_fn)
+    classification_loss_fn = functools.partial(
+        masked_loss, loss_fn=efficientdet.losses.focal_loss)
+    
+    # Compile the model
+    model.build([None, model.config.input_size, model.config.input_size, 3])
+    model.summary()
+    
+    keras_training_loop = True
+    if keras_training_loop:
+        # Wrap datasets so they return the anchors labels
+        dataset_training_head_fn = functools.partial(
+            compute_gt, anchors=anchors, num_classes=len(class2idx))
 
-        engine.train_single_epoch(
-            model=model,
-            anchors=anchors,
-            dataset=ds,
-            optimizer=optimizer,
-            grad_accum_steps=kwargs['grad_accum_steps'],
-            loss_fn=loss_fn,
-            num_classes=len(class2idx),
-            epoch=epoch,
-            steps=steps_per_epoch,
-            print_every=kwargs['print_freq'])
-
-        if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
-            print('Evaluating COCO mAP...')
-            engine.evaluate(
-                model=model,
-                dataset=val_ds,
-                steps=validation_steps,
-                print_every=kwargs['print_freq'],
-                class2idx=class2idx)
+        wrapped_ds = ds.map(dataset_training_head_fn)
+        wrapped_val_ds = val_ds.map(dataset_training_head_fn)
         
-        model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
-        arch = kwargs['efficientdet']
-        save_dir = (save_checkpoint_dir / 
-                    f'{arch}_{model_type}_{epoch}')
-        kwargs['n_classes'] = len(class2idx)
-        efficientdet.checkpoint.save(
-            model, kwargs, save_dir, optimizer=optimizer)
+        model.compile(loss=[regression_loss_fn, classification_loss_fn], 
+                      optimizer=optimizer)
+
+        callbacks = [COCOmAPCallback(val_ds, 
+                                     class2idx, 
+                                     validate_every=kwargs['validate_freq']),
+                    tf.keras.callbacks.ModelCheckpoint(
+                        str(save_checkpoint_dir / 'model.tf'))]
+
+        model.fit(wrapped_ds.repeat(), 
+                validation_data=wrapped_val_ds, 
+                steps_per_epoch=steps_per_epoch,
+                validation_steps=validation_steps,
+                epochs=kwargs['epochs'],
+                callbacks=callbacks)
+
+    else:
+        def loss_fn(y_true_clf, y_pred_clf, y_true_reg, y_pred_reg):
+            r_loss = regression_loss_fn(y_true_reg, y_pred_reg)
+            c_loss = classification_loss_fn(y_true_clf, y_pred_clf)
+            return r_loss, c_loss
+
+        for epoch in range(kwargs['epochs']):
+            engine.train_single_epoch(
+                model=model,
+                anchors=anchors,
+                dataset=ds,
+                optimizer=optimizer,
+                grad_accum_steps=kwargs['grad_accum_steps'],
+                loss_fn=loss_fn,
+                num_classes=len(class2idx),
+                epoch=epoch,
+                steps=steps_per_epoch,
+                print_every=kwargs['print_freq'])
+
+            if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
+                print('Evaluating COCO mAP...')
+                coco.evaluate(
+                    model=model,
+                    dataset=val_ds,
+                    steps=validation_steps,
+                    print_every=kwargs['print_freq'],
+                    class2idx=class2idx)
+            
+            model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
+            arch = kwargs['efficientdet']
+            save_dir = (save_checkpoint_dir / 
+                        f'{arch}_{model_type}_{epoch}')
+            kwargs['n_classes'] = len(class2idx)
+            efficientdet.checkpoint.save(
+                model, kwargs, save_dir, optimizer=optimizer)
 
 
 @click.group()

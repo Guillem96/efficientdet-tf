@@ -129,5 +129,6 @@ def build_dataset(dataset_path: Union[str, Path] = None,
 
     if data_augmentation:
         ds = ds.map(augment)
+        ds = ds.filter(lambda im, a: tf.greater(tf.shape(a[0])[0], 0))
     
     return ds

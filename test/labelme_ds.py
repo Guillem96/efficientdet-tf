@@ -32,8 +32,8 @@ class LabelmeDatasetTest(unittest.TestCase):
         return tf.concat(anchors, axis=0)
 
     def test_compute_gt(self):
-        classes = ['treecko', 'psyduck', 'greninja', 'solgaleo', 'mewtwo']
-        class2idx = {c: i for i, c in enumerate(classes)}
+        classes, class2idx = utils.io.read_class_names(
+            'test/data/pokemon/classes.names') 
         ds = labelme.build_dataset('test/data/pokemon',
                                    'test/data/pokemon',
                                    class2idx=class2idx,
