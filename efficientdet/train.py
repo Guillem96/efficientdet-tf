@@ -10,24 +10,42 @@ import efficientdet
 from efficientdet import coco
 import efficientdet.utils as utils
 from .callbacks import COCOmAPCallback
+from . import engine
 
 
-def masked_loss(y_true, y_pred, loss_fn, **kwargs):
-    y_shape = tf.shape(y_true)
-    batch = y_shape[0]
-    n_anchors = y_shape[1]
+class EfficientDetLoss(tf.keras.losses.Loss):
+    def __init__(self, objective: str):
+        super(EfficientDetLoss, self).__init__()
 
-    anchors_states = y_true[:, :, -1]
-    not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
-    true_idx = tf.where(tf.equal(anchors_states, 1.))
+        self.is_clf = tf.constant(objective == 'classification', dtype=tf.bool)
+        self.name = 'efficientdet_loss'
+        if objective == 'classification':
+            self.loss_fn = efficientdet.losses.focal_loss
+        elif objective == 'regression':
+            self.loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
+        else:
+            raise ValueError('No valid objective')
+        
+    def call(self, y_true, y_pred):
+        y_shape = tf.shape(y_true)
+        batch = y_shape[0]
+        n_anchors = y_shape[1]
 
-    normalizer = tf.shape(true_idx)[0]
-    normalizer = tf.cast(normalizer, tf.float32)
+        anchors_states = y_true[:, :, -1]
+        not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
+        true_idx = tf.where(tf.equal(anchors_states, 1.))
 
-    y_true = tf.gather_nd(y_true[:, :, :-1], true_idx)
-    y_pred = tf.gather_nd(y_pred, true_idx)
+        normalizer = tf.shape(true_idx)[0]
+        normalizer = tf.cast(normalizer, tf.float32)
 
-    return tf.divide(loss_fn(y_true, y_pred), normalizer)
+        # We only regress true boxes, but we classify positive and negative
+        # instances
+        indexer = tf.cond(self.is_clf, lambda: not_ignore_idx, lambda: true_idx)
+
+        y_true = tf.gather_nd(y_true[:, :, :-1], indexer)
+        y_pred = tf.gather_nd(y_pred, indexer)
+
+        return tf.divide(self.loss_fn(y_true, y_pred), normalizer)
 
 
 def compute_gt(images: tf.Tensor, 
@@ -118,10 +136,8 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             momentum=0.9)
 
     # Declare loss functions
-    huber_loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
-    regression_loss_fn = functools.partial(masked_loss, loss_fn=huber_loss_fn)
-    classification_loss_fn = functools.partial(
-        masked_loss, loss_fn=efficientdet.losses.focal_loss)
+    regression_loss_fn = EfficientDetLoss('regression')
+    classification_loss_fn = EfficientDetLoss('classification')
     
     # Compile the model
     model.build([None, model.config.input_size, model.config.input_size, 3])
@@ -146,11 +162,11 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
                         str(save_checkpoint_dir / 'model.tf'))]
 
         model.fit(wrapped_ds.repeat(), 
-                validation_data=wrapped_val_ds, 
-                steps_per_epoch=steps_per_epoch,
-                validation_steps=validation_steps,
-                epochs=kwargs['epochs'],
-                callbacks=callbacks)
+                  validation_data=wrapped_val_ds, 
+                  steps_per_epoch=steps_per_epoch,
+                  validation_steps=validation_steps,
+                  epochs=kwargs['epochs'],
+                  callbacks=callbacks)
 
     else:
         def loss_fn(y_true_clf, y_pred_clf, y_true_reg, y_pred_reg):
@@ -173,13 +189,15 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
 
             if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
                 print('Evaluating COCO mAP...')
+                model.training_mode = False
                 coco.evaluate(
                     model=model,
                     dataset=val_ds,
                     steps=validation_steps,
                     print_every=kwargs['print_freq'],
                     class2idx=class2idx)
-            
+                model.training_mode = True
+
             model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
             arch = kwargs['efficientdet']
             save_dir = (save_checkpoint_dir / 
