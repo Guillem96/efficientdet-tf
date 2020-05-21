@@ -10,42 +10,6 @@ import efficientdet
 from efficientdet import coco
 import efficientdet.utils as utils
 from .callbacks import COCOmAPCallback
-from . import engine
-
-
-class EfficientDetLoss(tf.keras.losses.Loss):
-    def __init__(self, objective: str):
-        super(EfficientDetLoss, self).__init__()
-
-        self.is_clf = tf.constant(objective == 'classification', dtype=tf.bool)
-        self.name = 'efficientdet_loss'
-        if objective == 'classification':
-            self.loss_fn = efficientdet.losses.focal_loss
-        elif objective == 'regression':
-            self.loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
-        else:
-            raise ValueError('No valid objective')
-        
-    def call(self, y_true, y_pred):
-        y_shape = tf.shape(y_true)
-        batch = y_shape[0]
-        n_anchors = y_shape[1]
-
-        anchors_states = y_true[:, :, -1]
-        not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
-        true_idx = tf.where(tf.equal(anchors_states, 1.))
-
-        normalizer = tf.shape(true_idx)[0]
-        normalizer = tf.cast(normalizer, tf.float32)
-
-        # We only regress true boxes, but we classify positive and negative
-        # instances
-        indexer = tf.cond(self.is_clf, lambda: not_ignore_idx, lambda: true_idx)
-
-        y_true = tf.gather_nd(y_true[:, :, :-1], indexer)
-        y_pred = tf.gather_nd(y_pred, indexer)
-
-        return tf.divide(self.loss_fn(y_true, y_pred), normalizer)
 
 
 def compute_gt(images: tf.Tensor, 
@@ -89,17 +53,10 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     steps_per_epoch = sum(1 for _ in ds)
     if val_ds is not None:
         validation_steps = sum(1 for _ in val_ds)
+    else:
+        validation_steps = 0
 
-    if kwargs['checkpoint'] is not None:
-        print('Loading checkpoint from {}...'.format(kwargs['checkpoint']))
-        (model, optimizer), _ = efficientdet.checkpoint.load(
-            kwargs['checkpoint'], load_optimizer=True, training_mode=True)
-
-        for l in model.layers:
-            l.trainable = True
-        model.trainable = True
-
-    elif kwargs['from_pretrained'] is not None:
+    if kwargs['from_pretrained'] is not None:
         model = efficientdet.EfficientDet(
             weights=kwargs['from_pretrained'],
             num_classes=len(class2idx),
@@ -119,93 +76,53 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             weights='imagenet',
             training_mode=True)
 
-    # Only recreate optimizer and scheduler if not loading from checkpoint
-    if kwargs['checkpoint'] is None or kwargs['from_pretrained'] is not None:
-        if kwargs['w_scheduler']:
-            optim_steps = (steps_per_epoch // kwargs['grad_accum_steps'])
-            lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
-                kwargs['learning_rate'],
-                warmup_steps=optim_steps,
-                decay_steps=optim_steps * (kwargs['epochs'] - 1),
-                alpha=kwargs['alpha'])
-        else:
-            lr = kwargs['learning_rate']
+    if kwargs['w_scheduler']:
+        optim_steps = (steps_per_epoch // kwargs['grad_accum_steps'])
+        lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
+            kwargs['learning_rate'],
+            warmup_steps=optim_steps,
+            decay_steps=optim_steps * (kwargs['epochs'] - 1),
+            alpha=kwargs['alpha'])
+    else:
+        lr = kwargs['learning_rate']
 
-        optimizer = tf.optimizers.SGD(
-            learning_rate=lr,
-            momentum=0.9)
+    optimizer = tf.optimizers.SGD(
+        learning_rate=lr,
+        momentum=0.9)
 
     # Declare loss functions
-    regression_loss_fn = EfficientDetLoss('regression')
-    classification_loss_fn = EfficientDetLoss('classification')
+    regression_loss_fn = efficientdet.losses.EfficientDetLoss('regression')
+    clf_loss_fn = efficientdet.losses.EfficientDetLoss('classification')
     
     # Compile the model
     model.build([None, model.config.input_size, model.config.input_size, 3])
     model.summary()
     
-    keras_training_loop = True
-    if keras_training_loop:
-        # Wrap datasets so they return the anchors labels
-        dataset_training_head_fn = functools.partial(
-            compute_gt, anchors=anchors, num_classes=len(class2idx))
+    # Wrap datasets so they return the anchors labels
+    dataset_training_head_fn = functools.partial(
+        compute_gt, anchors=anchors, num_classes=len(class2idx))
 
-        wrapped_ds = ds.map(dataset_training_head_fn)
-        wrapped_val_ds = val_ds.map(dataset_training_head_fn)
-        
-        model.compile(loss=[regression_loss_fn, classification_loss_fn], 
-                      optimizer=optimizer)
+    wrapped_ds = ds.map(dataset_training_head_fn)
+    wrapped_val_ds = val_ds.map(dataset_training_head_fn)
+    
+    model.compile(loss=[regression_loss_fn, clf_loss_fn], 
+                  optimizer=optimizer)
+    
+    if kwargs['checkpoint'] is not None:
+        model.load_weights(kwargs['checkpoint'])
 
-        callbacks = [COCOmAPCallback(val_ds, 
-                                     class2idx, 
-                                     validate_every=kwargs['validate_freq']),
+    callbacks = [COCOmAPCallback(val_ds, 
+                                    class2idx, 
+                                    validate_every=kwargs['validate_freq']),
                     tf.keras.callbacks.ModelCheckpoint(
-                        str(save_checkpoint_dir / 'model.tf'))]
+                    str(save_checkpoint_dir / 'model.tf'))]
 
-        model.fit(wrapped_ds.repeat(), 
-                  validation_data=wrapped_val_ds, 
-                  steps_per_epoch=steps_per_epoch,
-                  validation_steps=validation_steps,
-                  epochs=kwargs['epochs'],
-                  callbacks=callbacks)
-
-    else:
-        def loss_fn(y_true_clf, y_pred_clf, y_true_reg, y_pred_reg):
-            r_loss = regression_loss_fn(y_true_reg, y_pred_reg)
-            c_loss = classification_loss_fn(y_true_clf, y_pred_clf)
-            return r_loss, c_loss
-
-        for epoch in range(kwargs['epochs']):
-            engine.train_single_epoch(
-                model=model,
-                anchors=anchors,
-                dataset=ds,
-                optimizer=optimizer,
-                grad_accum_steps=kwargs['grad_accum_steps'],
-                loss_fn=loss_fn,
-                num_classes=len(class2idx),
-                epoch=epoch,
-                steps=steps_per_epoch,
-                print_every=kwargs['print_freq'])
-
-            if val_ds is not None and (epoch + 1) % kwargs['validate_freq'] == 0:
-                print('Evaluating COCO mAP...')
-                model.training_mode = False
-                coco.evaluate(
-                    model=model,
-                    dataset=val_ds,
-                    steps=validation_steps,
-                    print_every=kwargs['print_freq'],
-                    class2idx=class2idx)
-                model.training_mode = True
-
-            model_type = 'bifpn' if kwargs['bidirectional'] else 'fpn'
-            arch = kwargs['efficientdet']
-            save_dir = (save_checkpoint_dir / 
-                        f'{arch}_{model_type}_{epoch}')
-            kwargs['n_classes'] = len(class2idx)
-            efficientdet.checkpoint.save(
-                model, kwargs, save_dir, optimizer=optimizer)
-
+    model.fit(wrapped_ds.repeat(), 
+              validation_data=wrapped_val_ds, 
+              steps_per_epoch=steps_per_epoch,
+              validation_steps=validation_steps,
+              epochs=kwargs['epochs'],
+              callbacks=callbacks)
 
 @click.group()
 
@@ -276,9 +193,10 @@ def main(ctx, **kwargs):
 
 
 @main.command(name='VOC')
-@click.option('--train-dataset', type=click.Path(file_okay=False),
-              help='Path to save the dataset. Useful to set a google cloud '
-                   'bucket to later train with TPUs')
+@click.option('--root-train', type=click.Path(file_okay=False),
+              help='Path to VOC formatted train dataset', required=True)
+@click.option('--root-valid', type=click.Path(file_okay=False),
+              help='Path to VOC formatted validation dataset', default=None)
 @click.pass_context
 def VOC(ctx, **kwargs):
     kwargs.update(ctx.obj['common'])
@@ -289,28 +207,30 @@ def VOC(ctx, **kwargs):
     class2idx = efficientdet.data.voc.LABEL_2_IDX
     im_size = (config.input_size,) * 2
     train_ds = efficientdet.data.voc.build_dataset(
-        kwargs.get('train_dataset', None),
+        kwargs['root_train'],
         im_size,
-        'train',
-        shuffle=True, 
+        shuffle=True,
         data_augmentation=True)
     
-    valid_ds = efficientdet.data.voc.build_dataset(
-        kwargs.get('train_dataset', None),
-        im_size,
-        'validation',
-        shuffle=False, 
-        data_augmentation=False)
     
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 
                                                     ((None,), (None, 4))),
                                      padding_values=(0., (-1, -1.)))
 
-    valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
-                                     padded_shapes=((*im_size, 3), 
-                                                    ((None,), (None, 4))),
-                                     padding_values=(0., (-1, -1.)))
+    if kwargs['root_valid'] is not None:
+        valid_ds = efficientdet.data.voc.build_dataset(
+            kwargs['root_valid'],
+            im_size,
+            shuffle=False, 
+            data_augmentation=False)
+    
+        valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
+                                        padded_shapes=((*im_size, 3), 
+                                                        ((None,), (None, 4))),
+                                        padding_values=(0., (-1, -1.)))
+    else:
+        valid_ds = None
 
     train(config, save_checkpoint_dir, 
           anchors, train_ds, valid_ds, class2idx, **kwargs)
@@ -318,9 +238,9 @@ def VOC(ctx, **kwargs):
 
 @main.command()
 
-@click.option('--train-dataset', type=click.Path(file_okay=False, exists=True),
+@click.option('--root-train', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to train  annotations')
-@click.option('--val-dataset', default=None, 
+@click.option('--root-valid', default=None, 
               type=click.Path(file_okay=False),
               help='Path to validation annotations. If it is '
                    ' not set by the user, validation won\'t be performed')
@@ -345,7 +265,7 @@ def labelme(ctx, **kwargs):
     im_size = (config.input_size,) * 2
 
     train_ds = efficientdet.data.labelme.build_dataset(
-        annotations_path=kwargs['train_dataset'],
+        annotations_path=kwargs['root_train'],
         images_path=kwargs['images_path'],
         class2idx=class2idx,
         im_input_size=im_size,
@@ -358,9 +278,9 @@ def labelme(ctx, **kwargs):
                                      padding_values=(0., (-1, -1.)))
 
     valid_ds = None
-    if kwargs['val_dataset']:
+    if kwargs['root_valid']:
         valid_ds = efficientdet.data.labelme.build_dataset(
-            annotations_path=kwargs['val_dataset'],
+            annotations_path=kwargs['root_valid'],
             images_path=kwargs['images_path'],
             class2idx=class2idx,
             im_input_size=im_size,
