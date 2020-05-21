@@ -54,3 +54,39 @@ def huber_loss(y_true: tf.Tensor,
         return tf.reduce_sum(loss)
 
     return loss
+
+
+class EfficientDetLoss(tf.keras.losses.Loss):
+    
+    def __init__(self, objective: str):
+        super(EfficientDetLoss, self).__init__()
+
+        self.is_clf = tf.constant(objective == 'classification', dtype=tf.bool)
+        self.name = 'efficientdet_loss'
+        if objective == 'classification':
+            self.loss_fn = focal_loss
+        elif objective == 'regression':
+            self.loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
+        else:
+            raise ValueError('No valid objective')
+        
+    def call(self, y_true, y_pred):
+        y_shape = tf.shape(y_true)
+        batch = y_shape[0]
+        n_anchors = y_shape[1]
+
+        anchors_states = y_true[:, :, -1]
+        not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
+        true_idx = tf.where(tf.equal(anchors_states, 1.))
+
+        normalizer = tf.shape(true_idx)[0]
+        normalizer = tf.cast(normalizer, tf.float32)
+
+        # We only regress true boxes, but we classify positive and negative
+        # instances
+        indexer = tf.cond(self.is_clf, lambda: not_ignore_idx, lambda: true_idx)
+
+        y_true = tf.gather_nd(y_true[:, :, :-1], indexer)
+        y_pred = tf.gather_nd(y_pred, indexer)
+
+        return tf.divide(self.loss_fn(y_true, y_pred), normalizer)

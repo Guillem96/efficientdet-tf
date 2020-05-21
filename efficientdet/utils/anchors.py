@@ -59,13 +59,14 @@ class AnchorGenerator(object):
         tf.Tensor of shape [BATCH, N_BOXES, 4]
         """
         def arange(limit):
-            return tf.range(0, limit, dtype=tf.float32)
+            return tf.range(0., tf.cast(limit, tf.float32), dtype=tf.float32)
         
         h = feature_map_shape[0]
         w = feature_map_shape[1]
 
-        shift_x = (arange(w) + 0.5) * self.stride
-        shift_y = (arange(h) + 0.5) * self.stride
+        stride = tf.cast(self.stride, tf.float32)
+        shift_x = (arange(w) + 0.5) * stride
+        shift_y = (arange(h) + 0.5) * stride
 
         shift_x, shift_y = tf.meshgrid(shift_x, shift_y)
         shift_x = tf.reshape(shift_x, [-1])

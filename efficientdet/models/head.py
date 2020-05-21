@@ -23,7 +23,8 @@ class RetinaNetBBPredictor(tf.keras.Model):
 
         self.bb_regressor = tf.keras.layers.Conv2D(num_anchors * 4,
                                                    kernel_size=3,
-                                                   padding='same')
+                                                   padding='same',
+                                                   name='regression')
 
     def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
@@ -57,7 +58,8 @@ class RetinaNetClassifier(tf.keras.Model):
                                                 kernel_size=3,
                                                 activation='sigmoid',
                                                 padding='same',
-                                                bias_initializer=w_init)
+                                                bias_initializer=w_init,
+                                                name='classification')
 
     def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]

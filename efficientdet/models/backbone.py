@@ -36,4 +36,5 @@ def build_efficient_net_backbone(B: int = 0,
     features.append(nl)
 
     return tf.keras.Model(base_model.input, 
-                          outputs=[f.output for f in features[-5:]])
+                          outputs=[f.output for f in features[-5:]],
+                          name=f'EfficientNetB{B:d}')

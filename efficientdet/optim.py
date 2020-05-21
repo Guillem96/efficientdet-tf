@@ -19,29 +19,40 @@ class WarmupCosineDecayLRScheduler(LearningRateSchedule):
         self.max_lr = max_lr
         self.last_step = 0
 
-        self.warmup_steps = warmup_steps
+        self.warmup_steps = int(warmup_steps)
         self.linear_increase = self.max_lr / float(self.warmup_steps)
 
-        self.decay_steps = decay_steps
+        self.decay_steps = int(decay_steps)
+
+    def _decay(self):
+        rate = tf.subtract(self.last_step, self.warmup_steps) 
+        rate = tf.divide(rate, self.decay_steps)
+        rate = tf.cast(rate, tf.float32)
+
+        cosine_decayed = tf.multiply(tf.constant(math.pi), rate)
+        cosine_decayed = tf.add(1., tf.cos(cosine_decayed))
+        cosine_decayed = tf.multiply(.5, cosine_decayed)
+
+        decayed = tf.subtract(1., self.alpha)
+        decayed = tf.multiply(decayed, cosine_decayed)
+        decayed = tf.add(decayed, self.alpha)
+        return tf.multiply(self.max_lr, decayed)
 
     @property
     def current_lr(self):
-        if self.last_step < self.warmup_steps:
-            return self.linear_increase * self.last_step
-        else:
-            rate = (self.last_step - self.warmup_steps) / self.decay_steps
-            cosine_decayed = 0.5 * (1.0 + tf.cos(
-                tf.constant(math.pi) * rate))
-            decayed = (1 - self.alpha) * cosine_decayed + self.alpha
-            return self.max_lr * decayed
+        return tf.cond(tf.less(self.last_step, self.warmup_steps),
+                       lambda: tf.multiply(self.linear_increase, self.last_step),
+                       lambda: self._decay())
 
     def __call__(self, step):
-        self.last_step = int(step)
+        self.last_step = step
         return self.current_lr
 
     def get_config(self):
-        return {
-            "steps_per_epoch": self.steps_per_epoch,
-            "n_epochs": self.n_epochs,
-            'alpha': self.alpha,
+        config = {
+            "max_lr": self.max_lr,
+            "warmup_steps": self.warmup_steps,
+            'decay_steps': self.decay_steps,
+            'alpha': self.alpha
         }
+        return config
