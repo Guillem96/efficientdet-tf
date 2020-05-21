@@ -24,7 +24,7 @@ def main(ctx, **kwargs):
 
 @main.command()
 # Data parameters
-@click.option('--test-dataset', type=click.Path(file_okay=False, exists=True),
+@click.option('--root-test', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
 @click.option('--images-path', type=click.Path(file_okay=False),
               required=True, default='',
@@ -44,7 +44,7 @@ def labelme(ctx, **kwargs):
         kwargs['classes_file'])
 
     ds = efficientdet.data.labelme.build_dataset(
-            annotations_path=kwargs['test_dataset'],
+            annotations_path=kwargs['root_test'],
             images_path=kwargs['images_path'],
             class2idx=class2idx,
             im_input_size=im_size,
@@ -64,6 +64,8 @@ def labelme(ctx, **kwargs):
 
 
 @main.command(name='VOC')
+@click.option('--root-test', type=click.Path(file_okay=False, exists=True),
+              required=True, help='Path to annotations and images')
 @click.pass_context
 def VOC(ctx, **kwargs):
     kwargs.update(ctx.obj['common'])
@@ -75,6 +77,7 @@ def VOC(ctx, **kwargs):
 
     im_size = (config.input_size,) * 2
     ds = efficientdet.data.voc.build_dataset(
+        kwargs['root_test'],
         im_input_size=im_size,
         split='test',
         shuffle=True, 

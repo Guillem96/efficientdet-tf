@@ -81,15 +81,19 @@ class EfficientDet(tf.keras.Model):
             checkpoint_path = _WEIGHTS_PATHS[weights]
             save_dir = download_folder(checkpoint_path)
 
+            params = json.load((save_dir/'hp.json').open())
+
             # If num_classes is specified it must be the same as in the 
             # weights checkpoint except if the custom head classifier is set
             # to true
             if (num_classes is not None and not custom_head_classifier and
-                num_classes != params['num_classes']):
+                num_classes != params['n_classes']):
                 raise ValueError(f'Weights {weights} num classes are different'
                                   'from num_classes argument, please leave it '
                                   ' as None or specify the correct classes')
             
+            bidirectional = params['bidirectional']
+            D = params['efficientdet']
 
         # Declare the model architecture
         self.config = config.EfficientDetCompudScaling(D=D)
@@ -194,14 +198,14 @@ class EfficientDet(tf.keras.Model):
         """
         from efficientdet.utils.checkpoint import load
         
-        if (not Path(checkpoint_path).is_file() and 
+        if (not Path(checkpoint_path).is_dir() and 
                 str(checkpoint_path) not in _AVAILABLE_WEIGHTS):
             raise ValueError(f'Checkpoint {checkpoint_path} is not available')
         
         if str(checkpoint_path) in _AVAILABLE_WEIGHTS:
             checkpoint_path = _WEIGHTS_PATHS[checkpoint_path]
 
-        model = tf.keras.models.load_model(checkpoint_path)
+        model, _ = load(checkpoint_path, **kwargs)
 
         if num_classes is not None:
             print('Loading a custom classification head...')

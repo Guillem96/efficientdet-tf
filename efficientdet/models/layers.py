@@ -19,8 +19,10 @@ class Resize(tf.keras.Model):
              images: tf.Tensor, 
              target_dim: Tuple[int, int, int, int] = None, 
              training: bool = True) -> tf.Tensor:
-        dims = target_dim[1:3]
-        x = tf.image.resize(images, dims, method='nearest')
+        h = target_dim[1]
+        w = target_dim[2]
+
+        x = tf.image.resize(images, [h, w], method='nearest')
         x = self.antialiasing_conv(x, training=training)
         return x 
 

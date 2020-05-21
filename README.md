@@ -24,8 +24,7 @@ $pip install git+https://github.com/Guillem96/efficientdet-tf
 
 ## Training the model
 
-Currenty this EfficientDet implementation supports training with 2 data formats
-and automatically train with VOC2007:
+Currently this EfficientDet implementation supports training with 2 data formats:
 
 - **labelme format**. This format corresponds to the [labelme](https://github.com/wkentaro/labelme)
 annotations outputs.
@@ -40,12 +39,13 @@ the `efficientdet.train` script as follows:
 $ python efficientdet.train <efficientdet and train params> VOC
 ```
 
+Refer to this [script](scripts/train.sh) to see a training job example.
+
 ### Training With Command Line Interface (CLI)
 
 ```
 $ python -m efficientdet.train --help
-
-Usage: train.py [OPTIONS]
+Usage: train.py [OPTIONS] COMMAND [ARGS]...
 
 Options:
   --efficientdet INTEGER          EfficientDet architecture. {0, 1, 2, 3, 4,
@@ -56,34 +56,28 @@ Options:
                                   EfficientDet
   --freeze-backbone / --no-freeze-backbone
                                   Wether or not freeze EfficientNet backbone
+  --print-freq INTEGER            Print training loss every n steps
+  --validate-freq INTEGER         Print COCO evaluations every n epochs
   --epochs INTEGER                Number of epochs to train the model
   --batch-size INTEGER            Dataset batch size
-  --grad-accum-steps INTEGER      Gradient accumulation steps. Simulates a
-                                  larger batch size, for example if
-                                  batch_size=16 and grad_accum_steps=2 the
-                                  simulated batch size is 16 * 2 = 32
   --learning-rate FLOAT           Optimizer learning rate. It is recommended
                                   to reduce it in case backbone is not frozen
   --w-scheduler / --wo-scheduler  With learning rate scheduler or not. If left
                                   to true, --learning-rate option will act as
                                   max lr for the scheduler
-  --print-freq INTEGER            Print training loss every n steps
-  --validate-freq INTEGER         Print COCO evaluations every n epochs
-  --format [VOC|labelme]          Dataset to use for training  [required]
-  --train-dataset DIRECTORY       Path to annotations and images  [required]
-  --val-dataset DIRECTORY         Path to validation annotations. If it is
-                                  not set by the user, validation won't be
-                                  performed
-  --images-path DIRECTORY         Base path to images. Required when using
-                                  labelme format  [required]
-  --n-classes INTEGER             Number of important classes without taking
-                                  background into account  [required]
-  --classes-names TEXT            Only required when format is labelme. Name
-                                  of classes separated using comma.
-                                  class1,class2,class3
+  --alpha FLOAT                   Proportion to reduce the learning rate
+                                  during the decay period
   --checkpoint PATH               Path to model checkpoint
+  --from-pretrained TEXT          Path or reference to pretrained model. For
+                                  example if you want to train a model from a
+                                  VOC pretrained checkpoint, use the value
+                                  --from-pretrained D0-VOC
   --save-dir DIRECTORY            Directory to save model weights  [required]
   --help                          Show this message and exit.
+
+Commands:
+  VOC
+  labelme
 ```
 
 ### Train the model with labelme format
@@ -93,38 +87,13 @@ the data coming from [here](https://github.com/Guillem96/efficientdet-tf/tree/ma
 
 ```
 $ python -m efficientdet.train \
-  
-  --efficientdet 0 
-  --learning-rate 1e-2 
+  --efficientdet 0 \
+  --learning-rate 1e-2 \
   --save-dir models/pokemon \ 
-  
   labelme \
   --train-dataset test/data/pokemon/ \
   --images-path test/data/pokemon/ \
   --classes-file test/data/pokemon/classes.names 
-```
-
-### Train the model with VOC 2007 format
-
-The command below is the one that we should use if we want to train the model with
-the data coming from [here](https://github.com/Guillem96/efficientdet-tf/tree/master/test/data/VOC2007).
-
-```
-$ python -m efficientdet.train \
-    --efficientdet 0 \
-    --bidirectional \
-    --no-freeze-backbone \
-
-    --train-dataset test/data/VOC2007 \
-    --format VOC \
-    --n-classes 20 \
-    
-    --epochs 20 \
-    --batch-size 8 \
-    --learning-rate 0.16 \
-    --w-scheduler \
-
-    --save-dir models/voc-models/
 ```
 
 ## Evaluate a model
@@ -191,7 +160,7 @@ model = EfficientDet.from_pretrained(chckp_path,
 
 Transfer learning using the CLI.
 
-```
+```bash
 $ python -m efficientdet.train *usual-parameters* \
   --from-pretrained <badge_reference> # For example, D0-VOC
 ```

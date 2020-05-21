@@ -64,7 +64,7 @@ class EfficientDetLoss(tf.keras.losses.Loss):
         self.is_clf = tf.constant(objective == 'classification', dtype=tf.bool)
         self.name = 'efficientdet_loss'
         if objective == 'classification':
-            self.loss_fn = efficientdet.losses.focal_loss
+            self.loss_fn = focal_loss
         elif objective == 'regression':
             self.loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
         else:

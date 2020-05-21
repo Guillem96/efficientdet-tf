@@ -94,10 +94,6 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     regression_loss_fn = efficientdet.losses.EfficientDetLoss('regression')
     clf_loss_fn = efficientdet.losses.EfficientDetLoss('classification')
     
-    # Compile the model
-    model.build([None, model.config.input_size, model.config.input_size, 3])
-    model.summary()
-    
     # Wrap datasets so they return the anchors labels
     dataset_training_head_fn = functools.partial(
         compute_gt, anchors=anchors, num_classes=len(class2idx))
@@ -107,15 +103,22 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     
     model.compile(loss=[regression_loss_fn, clf_loss_fn], 
                   optimizer=optimizer)
-    
+
+    # Mock calls to create model specs
+    model.build([None, model.config.input_size, model.config.input_size, 3])
+    model.summary()
+
     if kwargs['checkpoint'] is not None:
         model.load_weights(kwargs['checkpoint'])
+
+    model.save_weights(str(save_checkpoint_dir / 'model.tf'))
 
     callbacks = [COCOmAPCallback(val_ds, 
                                     class2idx, 
                                     validate_every=kwargs['validate_freq']),
-                    tf.keras.callbacks.ModelCheckpoint(
-                    str(save_checkpoint_dir / 'model.tf'))]
+                tf.keras.callbacks.ModelCheckpoint(
+                    str(save_checkpoint_dir / 'model.tf'),
+                    save_weights_only=True)]
 
     model.fit(wrapped_ds.repeat(), 
               validation_data=wrapped_val_ds, 
@@ -147,10 +150,6 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
               help='Number of epochs to train the model')
 @click.option('--batch-size', type=int, default=16,
               help='Dataset batch size')
-@click.option('--grad-accum-steps', type=int, default=1,
-              help='Gradient accumulation steps. Simulates a larger batch '
-                   'size, for example if batch_size=16 and grad_accum_steps=2 '
-                   'the simulated batch size is 16 * 2 = 32')
 @click.option('--learning-rate', type=float, default=1e-3,
               help='Optimizer learning rate. It is recommended to reduce it '
                    'in case backbone is not frozen')
@@ -211,7 +210,6 @@ def VOC(ctx, **kwargs):
         im_size,
         shuffle=True,
         data_augmentation=True)
-    
     
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 

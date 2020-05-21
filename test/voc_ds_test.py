@@ -32,7 +32,7 @@ class VOCDatasetTest(unittest.TestCase):
         return tf.concat(anchors, axis=0)
 
     def test_compute_gt(self):
-        ds = voc.build_dataset(im_input_size=(512, 512))
+        ds = voc.build_dataset('test/data/VOC2007', im_input_size=(512, 512))
 
         anchors = self.generate_anchors(config.AnchorsConfig(), 512)
         im, (l, bbs) = next(iter(ds.take(1)))
@@ -44,9 +44,7 @@ class VOCDatasetTest(unittest.TestCase):
             tf.expand_dims(bbs, 0), 
             tf.expand_dims(l, 0), 
             tf.constant(20))
-        
 
-       
         near_mask = gt_reg[0, :, -1] == 1
         nearest_regressors = tf.expand_dims(
             tf.boolean_mask(gt_reg[0], near_mask)[:, :-1], 0)
