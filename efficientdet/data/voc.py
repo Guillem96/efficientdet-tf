@@ -113,13 +113,12 @@ def build_dataset(dataset_path: Union[str, Path],
     --------
     
     >>> ds = build_dataset('data/VOC2007', im_input_size=(128, 128))
-    >>> for images, (labels, bbs) in ds.take(1):
-    ...   print(images.shape)
+    >>> for image, (labels, bbs) in ds.take(1):
+    ...   print(image.shape)
     ...   print(labels, bbs.shape)
     ...
-    (2, 128, 128)
-    ([[1, 0]
-      [13, -1]], (2, 2, 4))
+    (128, 128, 3)
+    ([1, 13], (2, 4))
     Returns
     -------
     tf.data.Dataset

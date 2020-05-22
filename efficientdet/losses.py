@@ -1,3 +1,6 @@
+import abc
+from typing import Callable
+
 import tensorflow as tf
 
 
@@ -56,21 +59,22 @@ def huber_loss(y_true: tf.Tensor,
     return loss
 
 
-class EfficientDetLoss(tf.keras.losses.Loss):
+class _EfficientDetLoss(abc.ABC, tf.keras.losses.Loss):
     
-    def __init__(self, objective: str):
-        super(EfficientDetLoss, self).__init__()
+    def __init__(self) -> None:
+        super(_EfficientDetLoss, self).__init__()
+        self.name = 'efficientdet_loss_'
+        self.name += 'clf' if self.is_clf else 'reg'
+    
+    @abc.abstractproperty
+    def is_clf(self) -> tf.Tensor:
+        raise NotImplemented
+    
+    @abc.abstractproperty
+    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
+        raise NotImplemented
 
-        self.is_clf = tf.constant(objective == 'classification', dtype=tf.bool)
-        self.name = 'efficientdet_loss'
-        if objective == 'classification':
-            self.loss_fn = focal_loss
-        elif objective == 'regression':
-            self.loss_fn = tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
-        else:
-            raise ValueError('No valid objective')
-        
-    def call(self, y_true, y_pred):
+    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         y_shape = tf.shape(y_true)
         batch = y_shape[0]
         n_anchors = y_shape[1]
@@ -90,3 +94,23 @@ class EfficientDetLoss(tf.keras.losses.Loss):
         y_pred = tf.gather_nd(y_pred, indexer)
 
         return tf.divide(self.loss_fn(y_true, y_pred), normalizer)
+
+
+class EfficientDetFocalLoss(_EfficientDetLoss):
+
+    @property
+    def is_clf(self) -> tf.Tensor: return tf.constant(True, dtype=tf.bool)
+
+    @property
+    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
+        return focal_loss
+
+
+class EfficientDetHuberLoss(_EfficientDetLoss):
+
+    @property
+    def is_clf(self) -> tf.Tensor: return tf.constant(False, dtype=tf.bool)
+
+    @property
+    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
+        return tf.losses.Huber(reduction=tf.losses.Reduction.SUM)

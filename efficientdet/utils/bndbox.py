@@ -12,6 +12,7 @@ def to_tf_format(boxes: tf.Tensor):
     y1, x1, y2, x2 = tf.split(boxes, 4, axis=-1)
     return tf.concat([x1, y1, x2, y2], axis=-1)
 
+
 def scale_boxes(boxes: tf.Tensor,
                 from_size: Tuple[int, int],
                 to_size: Tuple[int, int]) -> tf.Tensor:
@@ -64,7 +65,9 @@ def normalize_bndboxes(boxes: tf.Tensor,
     tf.Tensor of shape [N_BOXES, 4]
         Normalized boxes with values in range [0, 1] 
     """
-    h, w = image_size
+    h = image_size[0]
+    w = image_size[1]
+
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=1)
     x1 /= (w - 1)
     x2 /= (w - 1)

@@ -1,4 +1,4 @@
-import functools
+import json
 from pathlib import Path
 from typing import Tuple, Mapping
 
@@ -7,48 +7,17 @@ import click
 import tensorflow as tf
 
 import efficientdet
-from efficientdet import coco
-import efficientdet.utils as utils
 from .callbacks import COCOmAPCallback
-
-
-def compute_gt(images: tf.Tensor, 
-               annots: Tuple[tf.Tensor, tf.Tensor], 
-               anchors: tf.Tensor,
-               num_classes: int) -> tf.data.Dataset:
-    labels = annots[0]
-    boxes = annots[1]
-
-    target_reg, target_clf = utils.anchors.anchor_targets_bbox(
-            anchors, images, boxes, labels, num_classes)
-
-    return images, (target_reg, target_clf)
-
-
-def generate_anchors(anchors_config: efficientdet.config.AnchorsConfig,
-                     im_shape: int) -> tf.Tensor:
-
-    anchors_gen = [utils.anchors.AnchorGenerator(
-            size=anchors_config.sizes[i - 3],
-            aspect_ratios=anchors_config.ratios,
-            stride=anchors_config.strides[i - 3]) 
-            for i in range(3, 8)]
-
-    shapes = [im_shape // (2 ** x) for x in range(3, 8)]
-
-    anchors = [g((size, size, 3))
-               for g, size in zip(anchors_gen, shapes)]
-
-    return tf.concat(anchors, axis=0)
 
 
 def train(config: efficientdet.config.EfficientDetCompudScaling, 
           save_checkpoint_dir: Path, 
-          anchors: tf.Tensor, 
           ds: tf.data.Dataset, 
           val_ds: tf.data.Dataset,
           class2idx: Mapping[str, int] ,
           **kwargs):
+
+    weights_file = str(save_checkpoint_dir / 'model.h5')
 
     steps_per_epoch = sum(1 for _ in ds)
     if val_ds is not None:
@@ -68,7 +37,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
         print('This will override any configuration related to EfficientNet'
               ' using the defined in the pretrained model.')
     else:
-        model = efficientdet.models.EfficientDet(
+        model = efficientdet.EfficientDet(
             len(class2idx),
             D=kwargs['efficientdet'],
             bidirectional=kwargs['bidirectional'],
@@ -77,11 +46,10 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             training_mode=True)
 
     if kwargs['w_scheduler']:
-        optim_steps = (steps_per_epoch // kwargs['grad_accum_steps'])
         lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
             kwargs['learning_rate'],
-            warmup_steps=optim_steps,
-            decay_steps=optim_steps * (kwargs['epochs'] - 1),
+            warmup_steps=steps_per_epoch,
+            decay_steps=steps_per_epoch * (kwargs['epochs'] - 1),
             alpha=kwargs['alpha'])
     else:
         lr = kwargs['learning_rate']
@@ -91,15 +59,16 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
         momentum=0.9)
 
     # Declare loss functions
-    regression_loss_fn = efficientdet.losses.EfficientDetLoss('regression')
-    clf_loss_fn = efficientdet.losses.EfficientDetLoss('classification')
+    regression_loss_fn = efficientdet.losses.EfficientDetHuberLoss()
+    clf_loss_fn = efficientdet.losses.EfficientDetFocalLoss()
     
     # Wrap datasets so they return the anchors labels
-    dataset_training_head_fn = functools.partial(
-        compute_gt, anchors=anchors, num_classes=len(class2idx))
+    wrapped_ds = efficientdet.wrap_detection_dataset(
+        ds, im_size=(model.config.input_size,) * 2, num_classes=len(class2idx))
 
-    wrapped_ds = ds.map(dataset_training_head_fn)
-    wrapped_val_ds = val_ds.map(dataset_training_head_fn)
+    wrapped_val_ds = efficientdet.wrap_detection_dataset(
+        val_ds, im_size=(model.config.input_size,) * 2, 
+        num_classes=len(class2idx))
     
     model.compile(loss=[regression_loss_fn, clf_loss_fn], 
                   optimizer=optimizer)
@@ -109,16 +78,16 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     model.summary()
 
     if kwargs['checkpoint'] is not None:
-        model.load_weights(kwargs['checkpoint'])
+        model.load_weights(weights_file)
 
-    model.save_weights(str(save_checkpoint_dir / 'model.tf'))
+    model.save_weights(weights_file)
+    kwargs.update(n_classes=len(class2idx))
+    json.dump(kwargs, (save_checkpoint_dir / 'hp.json').open('w'))
 
     callbacks = [COCOmAPCallback(val_ds, 
-                                    class2idx, 
-                                    validate_every=kwargs['validate_freq']),
-                tf.keras.callbacks.ModelCheckpoint(
-                    str(save_checkpoint_dir / 'model.tf'),
-                    save_weights_only=True)]
+                                 class2idx, 
+                                 validate_every=kwargs['validate_freq']),
+                 tf.keras.callbacks.ModelCheckpoint(weights_file)]
 
     model.fit(wrapped_ds.repeat(), 
               validation_data=wrapped_val_ds, 
@@ -126,6 +95,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
               validation_steps=validation_steps,
               epochs=kwargs['epochs'],
               callbacks=callbacks)
+
 
 @click.group()
 
@@ -178,16 +148,12 @@ def main(ctx, **kwargs):
 
     save_checkpoint_dir = Path(kwargs['save_dir'])
     save_checkpoint_dir.mkdir(exist_ok=True, parents=True)
-
+    
     config = efficientdet.config.EfficientDetCompudScaling(
         D=kwargs['efficientdet'])
 
-    anchors = generate_anchors(efficientdet.config.AnchorsConfig(),
-                               config.input_size)
-
     ctx.obj['common'] = kwargs
     ctx.obj['config'] = config
-    ctx.obj['anchors'] = anchors
     ctx.obj['save_checkpoint_dir'] = save_checkpoint_dir
 
 
@@ -200,7 +166,7 @@ def main(ctx, **kwargs):
 def VOC(ctx, **kwargs):
     kwargs.update(ctx.obj['common'])
 
-    config, anchors = ctx.obj['config'], ctx.obj['anchors']
+    config = ctx.obj['config']
     save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
 
     class2idx = efficientdet.data.voc.LABEL_2_IDX
@@ -231,7 +197,7 @@ def VOC(ctx, **kwargs):
         valid_ds = None
 
     train(config, save_checkpoint_dir, 
-          anchors, train_ds, valid_ds, class2idx, **kwargs)
+          train_ds, valid_ds, class2idx, **kwargs)
 
 
 @main.command()
@@ -254,7 +220,7 @@ def VOC(ctx, **kwargs):
 def labelme(ctx, **kwargs):
     kwargs.update(ctx.obj['common'])
     
-    config, anchors = ctx.obj['config'], ctx.obj['anchors']
+    config = ctx.obj['config']
     save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
 
     classes, class2idx = efficientdet.utils.io.read_class_names(
@@ -291,7 +257,7 @@ def labelme(ctx, **kwargs):
                                          padding_values=(0., (-1, -1.)))
 
     train(config, save_checkpoint_dir, 
-          anchors, train_ds, valid_ds, class2idx, **kwargs)
+          train_ds, valid_ds, class2idx, **kwargs)
 
 
 if __name__ == "__main__":

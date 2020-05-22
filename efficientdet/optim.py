@@ -40,9 +40,10 @@ class WarmupCosineDecayLRScheduler(LearningRateSchedule):
 
     @property
     def current_lr(self):
-        return tf.cond(tf.less(self.last_step, self.warmup_steps),
-                       lambda: tf.multiply(self.linear_increase, self.last_step),
-                       lambda: self._decay())
+        return tf.cond(
+            tf.less(self.last_step, self.warmup_steps),
+            lambda: tf.multiply(self.linear_increase, self.last_step),
+            lambda: self._decay())
 
     def __call__(self, step):
         self.last_step = step
