@@ -109,7 +109,8 @@ class EfficientDet(tf.keras.Model):
         
         # Setup the feature extractor neck
         if bidirectional:
-            self.neck = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
+            self.neck = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn, 
+                                     prefix='bifpn/')
         else:
             self.neck = models.FPN(self.config.Wbifpn)
 
@@ -117,9 +118,11 @@ class EfficientDet(tf.keras.Model):
         self.num_classes = num_classes
         self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
                                                      self.config.Dclass,
-                                                     num_classes)
+                                                     num_classes=num_classes,
+                                                     prefix='class_head/')
         self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
-                                                   self.config.Dclass)
+                                                   self.config.Dclass,
+                                                   prefix='regress_head/')
         
         self.training_mode = training_mode
 
@@ -134,9 +137,9 @@ class EfficientDet(tf.keras.Model):
             
             # Append a custom classifier
             if custom_head_classifier:
-                self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
-                                                             self.config.Dclass,
-                                                             num_classes)
+                self.class_head = models.RetinaNetClassifier(
+                    self.config.Wbifpn, self.config.Dclass,
+                    num_classes=num_classes, prefix='class_head/')
 
     def call(self, images: tf.Tensor, training: bool = True):
         """

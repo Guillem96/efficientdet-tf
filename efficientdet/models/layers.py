@@ -8,12 +8,13 @@ from efficientdet.utils import bndbox, anchors
 
 class Resize(tf.keras.Model):
 
-    def __init__(self, features: int):
+    def __init__(self, features: int, prefix: str = ''):
         super(Resize, self).__init__()
         self.antialiasing_conv = ConvBlock(features,
                                            separable=True,
                                            kernel_size=3, 
-                                           padding='same')
+                                           padding='same',
+                                           prefix=prefix + 'conv_block/')
 
     def call(self, 
              images: tf.Tensor, 
@@ -33,22 +34,31 @@ class ConvBlock(tf.keras.Model):
                  features: int = None, 
                  separable: bool = False, 
                  activation: str = None,
+                 prefix: str = '',
                  **kwargs):
         super(ConvBlock, self).__init__()
 
+
         if separable:
-            self.conv = tf.keras.layers.SeparableConv2D(filters=features, 
+            name = prefix + 'separable_conv'
+            self.conv = tf.keras.layers.SeparableConv2D(filters=features,
+                                                        name=name,
                                                         **kwargs)
         else:
-            self.conv = tf.keras.layers.Conv2D(features, **kwargs)
-        self.bn = tf.keras.layers.BatchNormalization()
+            name = prefix + 'conv'
+            self.conv = tf.keras.layers.Conv2D(features, name=name, **kwargs)
+
+        self.bn = tf.keras.layers.BatchNormalization(name=prefix + 'bn')
         
         if activation == 'swish':
-            self.activation = tf.keras.layers.Activation(tf.nn.swish)
+            self.activation = tf.keras.layers.Activation(
+                tf.nn.swish, name=prefix + 'swish')
         elif activation is not None:
-            self.activation = tf.keras.layers.Activation(activation)
+            self.activation = tf.keras.layers.Activation(activation,
+                name=prefix + activation)
         else:
-            self.activation = tf.keras.layers.Activation('linear')
+            self.activation = tf.keras.layers.Activation('linear',
+                name=prefix + 'linear')
 
     def call(self, x: tf.Tensor, training: bool = True) -> tf.Tensor:
         x = self.bn(self.conv(x), training=training)
