@@ -13,6 +13,8 @@ class COCOmAPCallback(tf.keras.callbacks.Callback):
                  validate_every: int = 1,
                  print_freq: int = 10):
         self.validation_data = validation_data
+        self.gtCOCO = coco.tf_data_to_COCO(validation_data, class2idx)
+
         self.class2idx = class2idx
         self.validate_every = validate_every
         self.print_freq = print_freq
@@ -22,7 +24,7 @@ class COCOmAPCallback(tf.keras.callbacks.Callback):
             self.model.training_mode = False
             coco.evaluate(self.model, 
                           self.validation_data, 
-                          self.class2idx, 
+                          self.gtCOCO,
                           sum(1 for _ in self.validation_data),
                           self.print_freq)
 

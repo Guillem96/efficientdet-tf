@@ -15,6 +15,8 @@ def main(ctx, **kwargs):
 
     model, params = efficientdet.checkpoint.load(
         kwargs['checkpoint'])
+        
+    params = {}
 
     ctx.ensure_object(dict)
     ctx.obj['common'] = kwargs
@@ -56,11 +58,13 @@ def labelme(ctx, **kwargs):
                                         ((None,), (None, 4))),
                          padding_values=(0., (-1, -1.)))
 
+    gtCOCO = coco.tf_data_to_COCO(ds, class2idx)
+
     coco.evaluate(
         model=model,
         dataset=ds,
         steps=sum(1 for _ in ds),
-        class2idx=class2idx)
+        gtCOCO=gtCOCO)
 
 
 @main.command(name='VOC')
@@ -79,20 +83,20 @@ def VOC(ctx, **kwargs):
     ds = efficientdet.data.voc.build_dataset(
         kwargs['root_test'],
         im_input_size=im_size,
-        split='test',
-        shuffle=True, 
-        data_augmentation=True)
+        shuffle=False, 
+        data_augmentation=False)
 
     ds = ds.padded_batch(batch_size=kwargs['batch_size'],
                          padded_shapes=((*im_size, 3), 
                                         ((None,), (None, 4))),
                          padding_values=(0., (-1, -1.)))
 
+    gtCOCO = coco.tf_data_to_COCO(ds, class2idx)
     coco.evaluate(
         model=model,
         dataset=ds,
         steps=sum(1 for _ in ds),
-        class2idx=class2idx)
+        gtCOCO=gtCOCO)
 
 if __name__ == "__main__":
     main()

@@ -54,11 +54,8 @@ def _COCO_gt_annot(image_id: int,
     return image, annotations
     
 
-def evaluate(model: tf.keras.Model, 
-             dataset: tf.data.Dataset,
-             class2idx: Mapping[str, int],
-             steps: int,
-             print_every: int = 10):
+def tf_data_to_COCO(ds: tf.data.Dataset,
+                    class2idx: Mapping[str, int]) -> COCO:
 
     gt_coco = dict(images=[], annotations=[])
     results_coco = []
@@ -69,49 +66,57 @@ def evaluate(model: tf.keras.Model,
     categories = [dict(supercategory='instance', id=i, name=n)
                   for n, i in class2idx.items()]
     gt_coco['categories'] = categories
+
+    for i, (image, (labels, bbs)) in enumerate(ds.unbatch()):
+        h, w = image.shape[0: 2]
+        im_annot, annots = _COCO_gt_annot(image_id, annot_id, 
+                                          (h, w), labels, bbs)
+        gt_coco['annotations'].extend(annots)
+        gt_coco['images'].append(im_annot)
+        
+        annot_id += len(annots)
+        image_id += 1
+
+    gtCOCO = COCO()
+    gtCOCO.dataset = gt_coco
+    gtCOCO.createIndex()
+
+    return gtCOCO
+
+
+def evaluate(model: tf.keras.Model, 
+             dataset: tf.data.Dataset,
+             gtCOCO: COCO,
+             steps: int,
+             print_every: int = 10):
+
+    results_coco = []
+    image_id = 1
     
     for i, (images, (labels, bbs)) in enumerate(dataset):
         
         bboxes, categories, scores = model(images, training=False)
         h, w = images.shape[1: 3]
-        
-        # Iterate through images in batch, and for each one
-        # create the ground truth coco annotation
 
         for batch_idx in range(len(bboxes)):
-            gt_labels, gt_boxes = labels[batch_idx], bbs[batch_idx]
-            no_padding_mask = gt_labels != -1
-            
-            gt_labels = tf.boolean_mask(gt_labels, no_padding_mask)
-            gt_boxes = tf.boolean_mask(gt_boxes, no_padding_mask)
-
-            im_annot, annots = _COCO_gt_annot(image_id, annot_id, 
-                                              (h, w), gt_labels, gt_boxes)
-            gt_coco['annotations'].extend(annots)
-            gt_coco['images'].append(im_annot)
-            
             preds = categories[batch_idx], bboxes[batch_idx], scores[batch_idx]
             pred_labels, pred_boxes, pred_scores = preds
 
             if pred_labels.shape[0] > 0:
                 results = _COCO_result(image_id, 
-                                       pred_labels, pred_boxes, pred_scores)
+                                       pred_labels, 
+                                       pred_boxes, 
+                                       pred_scores)
                 results_coco.extend(results)
             
-            annot_id += len(annots)
             image_id += 1
 
         if i % print_every == 0:
             print(f'Validating[{i}/{steps}]...')
 
-    # Convert custom annotations to COCO annots
-    gtCOCO = COCO()
-    gtCOCO.dataset = gt_coco
-    gtCOCO.createIndex()
-
     resCOCO = COCO()
-    resCOCO.dataset['images'] = [img for img in gt_coco['images']]
-    resCOCO.dataset['categories'] = copy.deepcopy(gt_coco['categories'])
+    resCOCO.dataset['images'] = gtCOCO.dataset['images']
+    resCOCO.dataset['categories'] = copy.deepcopy(gtCOCO.dataset['categories'])
 
     for i, ann in enumerate(results_coco):
         bb = ann['bbox']
