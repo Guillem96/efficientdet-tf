@@ -78,7 +78,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     model.summary()
 
     if kwargs['checkpoint'] is not None:
-        model.load_weights(weights_file)
+        model.load_weights(str(Path(kwargs['checkpoint']) / 'model.h5'))
 
     model.save_weights(weights_file)
     kwargs.update(n_classes=len(class2idx))

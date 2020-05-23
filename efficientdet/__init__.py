@@ -1,10 +1,11 @@
 
-from . import models
-from . import utils
-from . import losses
-from . import data
-from . import optim
 from . import coco
+from . import data
+from . import utils
+from . import optim
+from . import losses
+from . import models
+from . import callbacks
 
 from .models import EfficientDet
 
