@@ -11,8 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import math
-from typing import List, Union, Tuple, Sequence
+from typing import Any, Tuple, Sequence
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +24,7 @@ class AnchorGenerator(object):
     def __init__(self, 
                  size: float,
                  aspect_ratios: Sequence[float],
-                 stride: int = 1):
+                 stride: int = 1) -> None:
         """
         RetinaNet input examples:
             size: 32
@@ -42,10 +41,11 @@ class AnchorGenerator(object):
 
         self.anchors = self._generate()
     
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> tf.Tensor:
         return self.tile_anchors_over_feature_map(*args, **kwargs)
 
-    def tile_anchors_over_feature_map(self, feature_map_shape):
+    def tile_anchors_over_feature_map(
+            self, feature_map_shape: Tuple[int, int]) -> tf.Tensor:
         """
         Tile anchors over all feature map positions
 
@@ -58,7 +58,7 @@ class AnchorGenerator(object):
         --------
         tf.Tensor of shape [BATCH, N_BOXES, 4]
         """
-        def arange(limit):
+        def arange(limit: int) -> tf.Tensor:
             return tf.range(0., tf.cast(limit, tf.float32), dtype=tf.float32)
         
         h = feature_map_shape[0]
@@ -112,7 +112,7 @@ class AnchorGenerator(object):
 
         return tf.constant(anchors, dtype=tf.float32)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.aspect_ratios) * len(self.anchor_scales)
 
 
@@ -227,10 +227,10 @@ def anchor_targets_bbox(anchors: tf.Tensor,
 
 def compute_gt_annotations(anchors: tf.Tensor,
                            annotations: tf.Tensor,
-                           negative_overlap=0.4,
-                           positive_overlap=0.5) -> Tuple[tf.Tensor,
-                                                          tf.Tensor,
-                                                          tf.Tensor]:
+                           negative_overlap: float = 0.4,
+                           positive_overlap: float = 0.5) -> Tuple[tf.Tensor,
+                                                                   tf.Tensor,
+                                                                   tf.Tensor]:
     """ 
     Obtain indices of gt annotations with the greatest overlap.
     

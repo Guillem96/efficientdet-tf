@@ -9,20 +9,23 @@ import json
 import random
 from pathlib import Path
 from functools import partial
-from typing import Mapping, Tuple, Sequence, Union
+from typing import Mapping, Tuple, Sequence, Union, Iterator, Iterable
 
 import tensorflow as tf
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
 from .preprocess import augment
+from efficientdet.typing import Annotation, ObjectDetectionInstance
 
 
-def _load_bbox_from_rectangle(points: Sequence[float]) -> Sequence[float]:
+def _load_bbox_from_rectangle(
+        points: Iterable[Sequence[float]]) -> Sequence[float]:
     return sum(points, [])
 
 
-def _load_bbox_from_polygon(points: Sequence[float]) -> Sequence[float]:
+def _load_bbox_from_polygon(
+        points: Iterable[Sequence[float]]) -> Sequence[float]:
     xs, ys = zip(*points)
     xmin = min(xs)
     xmax = max(xs)
@@ -35,8 +38,7 @@ def _load_labelme_instance(
         images_base_path: Union[str, Path],
         annot_path: Union[str, Path],
         im_input_size: Tuple[int, int],
-        class2idx: Mapping[str, int]) -> Tuple[Sequence[int], 
-                                               Sequence[tf.Tensor]]:
+        class2idx: Mapping[str, int]) -> ObjectDetectionInstance:
     # Reads a labelme annotation and returns
     # a list of tuples containing the ground 
     # truth boxes and its respective label
@@ -69,14 +71,14 @@ def _load_labelme_instance(
     boxes = tf.stack(bbs)
     boxes = bb_utils.normalize_bndboxes(boxes, (h, w))
 
-    return image, tf.stack(labels), boxes
+    return image, (tf.stack(labels), boxes)
 
 
 def _labelme_gen(
         images_base_path: Union[str, Path],
         annot_files: Sequence[Path],
         im_input_size: Tuple[int, int],
-        class2idx: Mapping[str, int]):
+        class2idx: Mapping[str, int]) -> Iterator[ObjectDetectionInstance]:
 
     for f in annot_files:
         yield _load_labelme_instance(images_base_path=images_base_path,
@@ -86,12 +88,13 @@ def _labelme_gen(
 
 
 def _scale_boxes(image: tf.Tensor, 
-                 labels: tf.Tensor, 
-                 boxes: tf.Tensor, 
-                 to_size: Tuple[int, int]):
+                 annots: Annotation,
+                 to_size: Tuple[int, int]) -> ObjectDetectionInstance:
     
     # Wrapper function to call scale_boxes on tf dataset pipeline
-    h, w = to_size
+    h, w = to_size[0], to_size[1]
+    labels = annots[0]
+    boxes = annots[1]
 
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=1)
     x1 *= w

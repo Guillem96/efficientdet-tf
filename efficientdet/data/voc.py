@@ -6,7 +6,7 @@ Download the dataset from here:
 
 from pathlib import Path
 from functools import partial
-from typing import Tuple, Sequence, Union
+from typing import Tuple, Sequence, Union, Iterator
 
 import tensorflow as tf
 
@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
-from .preprocess import normalize_image, augment
+from .preprocess import augment
 
 
 IDX_2_LABEL = [
@@ -52,8 +52,8 @@ def _read_voc_annot(annot_path: str) -> Tuple[Sequence[int],
     # a list of tuples containing the ground 
     # truth boxes and its respective label
     root = ET.parse(annot_path).getroot()
-    image_size = (int(root.findtext('size/height')), 
-                  int(root.findtext('size/width')))
+    image_size = (int(root.findtext('size/height')), # type: ignore[arg-type]
+                  int(root.findtext('size/width')))  # type: ignore[arg-type]
 
     boxes = root.findall('object')
     bbs = []
@@ -61,12 +61,12 @@ def _read_voc_annot(annot_path: str) -> Tuple[Sequence[int],
 
     for b in boxes:
         bb = b.find('bndbox')
-        bb = (int(bb.findtext('xmin')), 
-              int(bb.findtext('ymin')), 
-              int(bb.findtext('xmax')), 
-              int(bb.findtext('ymax')))
+        bb = (int(bb.findtext('xmin')), # type: ignore
+              int(bb.findtext('ymin')), # type: ignore
+              int(bb.findtext('xmax')), # type: ignore
+              int(bb.findtext('ymax'))) # type: ignore
         bbs.append(bb)
-        labels.append(LABEL_2_IDX[b.findtext('name')])
+        labels.append(LABEL_2_IDX[b.findtext('name')]) # type: ignore
 
     bbs = tf.stack(bbs)
     bbs = bb_utils.normalize_bndboxes(bbs, image_size)
@@ -74,14 +74,18 @@ def _read_voc_annot(annot_path: str) -> Tuple[Sequence[int],
     return labels, bbs
 
 
-def _annot_gen(annot_file: Sequence[Path]):
+def _annot_gen(
+        annot_file: Sequence[Path]) -> Iterator[Tuple[Sequence[int], 
+                                                Sequence[tf.Tensor]]]:
     for f in annot_file:
         yield _read_voc_annot(str(f))
 
 
 def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor, 
-                 to_size: Tuple[int, int]):
-    h, w = to_size
+                 to_size: Tuple[int, int]) -> Tuple[Sequence[int], 
+                                                    Sequence[tf.Tensor]]:
+    h = to_size[0]
+    w = to_size[1]
 
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=1)
     x1 *= w
@@ -155,5 +159,6 @@ def build_dataset(dataset_path: Union[str, Path],
 
     if data_augmentation:
         ds = ds.map(augment)
-    
+        ds = ds.filter(lambda im, a: tf.greater(tf.shape(a[0])[0], 0))
+
     return ds

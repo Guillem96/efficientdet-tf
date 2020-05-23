@@ -7,7 +7,7 @@ from . import layers
 
 class Merge(tf.keras.layers.Layer):
 
-    def __init__(self, features: int = 64):
+    def __init__(self, features: int = 64) -> None:
         super(Merge, self).__init__()
         
         self.resize = layers.Resize(features)
@@ -26,7 +26,7 @@ class Merge(tf.keras.layers.Layer):
 
 class FPN(tf.keras.Model):
 
-    def __init__(self, features: int = 64):
+    def __init__(self, features: int = 64) -> None:
         super(FPN, self).__init__()
 
         self.features = features

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Tuple, Mapping
+from typing import Mapping, Any
 
 import click
 
@@ -15,9 +15,10 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
           ds: tf.data.Dataset, 
           val_ds: tf.data.Dataset,
           class2idx: Mapping[str, int] ,
-          **kwargs):
+          **kwargs: Any) -> None:
 
     weights_file = str(save_checkpoint_dir / 'model.h5')
+    im_size = config.input_size
 
     steps_per_epoch = sum(1 for _ in ds)
     if val_ds is not None:
@@ -64,17 +65,17 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     
     # Wrap datasets so they return the anchors labels
     wrapped_ds = efficientdet.wrap_detection_dataset(
-        ds, im_size=(model.config.input_size,) * 2, num_classes=len(class2idx))
+        ds, im_size=im_size, num_classes=len(class2idx))
 
     wrapped_val_ds = efficientdet.wrap_detection_dataset(
-        val_ds, im_size=(model.config.input_size,) * 2, 
+        val_ds, im_size=im_size, 
         num_classes=len(class2idx))
     
     model.compile(loss=[regression_loss_fn, clf_loss_fn], 
                   optimizer=optimizer)
 
     # Mock calls to create model specs
-    model.build([None, model.config.input_size, model.config.input_size, 3])
+    model.build([None, *im_size, 3])
     model.summary()
 
     if kwargs['checkpoint'] is not None:
@@ -143,7 +144,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
               type=click.Path(file_okay=False))
 
 @click.pass_context
-def main(ctx, **kwargs):
+def main(ctx: click.Context, **kwargs: Any) -> None:
     ctx.ensure_object(dict)
 
     save_checkpoint_dir = Path(kwargs['save_dir'])
@@ -163,14 +164,14 @@ def main(ctx, **kwargs):
 @click.option('--root-valid', type=click.Path(file_okay=False),
               help='Path to VOC formatted validation dataset', default=None)
 @click.pass_context
-def VOC(ctx, **kwargs):
+def VOC(ctx: click.Context, **kwargs: Any) -> None:
     kwargs.update(ctx.obj['common'])
 
     config = ctx.obj['config']
     save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
 
     class2idx = efficientdet.data.voc.LABEL_2_IDX
-    im_size = (config.input_size,) * 2
+    im_size = config.input_size
     train_ds = efficientdet.data.voc.build_dataset(
         kwargs['root_train'],
         im_size,
@@ -217,16 +218,16 @@ def VOC(ctx, **kwargs):
               help='path to file containing a class for line')
 
 @click.pass_context
-def labelme(ctx, **kwargs):
+def labelme(ctx: click.Context, **kwargs: Any) -> None:
     kwargs.update(ctx.obj['common'])
     
     config = ctx.obj['config']
     save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
 
-    classes, class2idx = efficientdet.utils.io.read_class_names(
+    _, class2idx = efficientdet.utils.io.read_class_names(
         kwargs['classes_file'])
 
-    im_size = (config.input_size,) * 2
+    im_size = config.input_size
 
     train_ds = efficientdet.data.labelme.build_dataset(
         annotations_path=kwargs['root_train'],

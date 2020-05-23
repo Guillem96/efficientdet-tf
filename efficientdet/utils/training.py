@@ -5,12 +5,12 @@ import tensorflow as tf
 
 from .. import config
 from . import anchors as anchors_utils
-
+from ..typing import ObjectDetectionInstance
 
 def _compute_gt(images: tf.Tensor, 
-               annots: Tuple[tf.Tensor, tf.Tensor], 
-               anchors: tf.Tensor,
-               num_classes: int) -> tf.data.Dataset:
+                annots: Tuple[tf.Tensor, tf.Tensor], 
+                anchors: tf.Tensor,
+                num_classes: int) -> ObjectDetectionInstance:
 
     labels = annots[0]
     boxes = annots[1]

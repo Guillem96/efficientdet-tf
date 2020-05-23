@@ -10,7 +10,7 @@ EPSILON = 1e-5
 
 
 class FastFusion(tf.keras.layers.Layer):
-    def __init__(self, size: int, features: int, prefix: str = None):
+    def __init__(self, size: int, features: int, prefix: str = '') -> None:
         super(FastFusion, self).__init__()
 
         self.size = size
@@ -39,25 +39,28 @@ class FastFusion(tf.keras.layers.Layer):
         """
         # The last feature map has to be resized according to the
         # other inputs
-        inputs[-1] = self.resize(
+        resampled_feature = self.resize(
             inputs[-1], tf.shape(inputs[0]), training=training)
+
+        resampled_features = inputs[:-1] + resampled_feature
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w, axis=0)
 
         # [INPUTS, BATCH, H, W, C]
-        weighted_inputs = [w[i] * inputs[i] for i in range(self.size)]
+        weighted_inputs = [(w[i] * resampled_features[i]) / w_sum
+                           for i in range(self.size)]
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
-        weighted_sum = tf.reduce_sum(weighted_inputs, axis=0) / w_sum
+        weighted_sum = tf.add_n(weighted_inputs, axis=0)
         return self.conv(weighted_sum, training=training)
         
 
 class BiFPNBlock(tf.keras.Model):
 
-    def __init__(self, features: int, prefix: str = ''):
+    def __init__(self, features: int, prefix: str = '') -> None:
         super(BiFPNBlock, self).__init__()
 
         # Feature fusion for intermediate level
@@ -115,7 +118,10 @@ class BiFPNBlock(tf.keras.Model):
 
 class BiFPN(tf.keras.Model):
     
-    def __init__(self, features: int = 64, n_blocks: int = 3, prefix: str = ''):
+    def __init__(self, 
+                 features: int = 64, 
+                 n_blocks: int = 3, 
+                 prefix: str = '') -> None:
         super(BiFPN, self).__init__()
 
         # One pixel-wise for each feature comming from the 

@@ -1,7 +1,6 @@
 import copy
-from typing import Tuple, Mapping
+from typing import Tuple, Mapping, Sequence, List
 
-import numpy as np
 import tensorflow as tf
 
 from pycocotools.coco import COCO
@@ -11,7 +10,7 @@ from pycocotools.cocoeval import COCOeval
 def _COCO_result(image_id: int,
                  labels: tf.Tensor,
                  bboxes: tf.Tensor,
-                 scores: tf.Tensor):
+                 scores: tf.Tensor) -> Sequence[dict]:
 
     b_h = bboxes[:, 3] - bboxes[:, 1]
     b_w = bboxes[:, 2] - bboxes[:, 0]
@@ -29,7 +28,7 @@ def _COCO_gt_annot(image_id: int,
                    annot_id: int,
                    image_shape: Tuple[int, int], 
                    labels: tf.Tensor, 
-                   bboxes: tf.Tensor):
+                   bboxes: tf.Tensor) -> Tuple[dict, Sequence[dict]]:
     
     im_h, im_w = image_shape
     
@@ -57,8 +56,7 @@ def _COCO_gt_annot(image_id: int,
 def tf_data_to_COCO(ds: tf.data.Dataset,
                     class2idx: Mapping[str, int]) -> COCO:
 
-    gt_coco = dict(images=[], annotations=[])
-    results_coco = []
+    gt_coco: dict = dict(images=[], annotations=[])
     image_id = 1
     annot_id = 1
 
@@ -67,7 +65,7 @@ def tf_data_to_COCO(ds: tf.data.Dataset,
                   for n, i in class2idx.items()]
     gt_coco['categories'] = categories
 
-    for i, (image, (labels, bbs)) in enumerate(ds.unbatch()):
+    for image, (labels, bbs) in ds.unbatch():
         h, w = image.shape[0: 2]
         im_annot, annots = _COCO_gt_annot(image_id, annot_id, 
                                           (h, w), labels, bbs)
@@ -88,15 +86,14 @@ def evaluate(model: tf.keras.Model,
              dataset: tf.data.Dataset,
              gtCOCO: COCO,
              steps: int,
-             print_every: int = 10):
+             print_every: int = 10) -> None:
 
-    results_coco = []
+    results_coco: List[dict] = []
     image_id = 1
     
-    for i, (images, (labels, bbs)) in enumerate(dataset):
+    for i, (images, _) in enumerate(dataset):
         
         bboxes, categories, scores = model(images, training=False)
-        h, w = images.shape[1: 3]
 
         for batch_idx in range(len(bboxes)):
             preds = categories[batch_idx], bboxes[batch_idx], scores[batch_idx]

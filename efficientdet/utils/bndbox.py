@@ -1,10 +1,9 @@
-from functools import partial
-from typing import Tuple, List, Union
+from typing import Tuple, Sequence
 
 import tensorflow as tf
 
 
-def to_tf_format(boxes: tf.Tensor):
+def to_tf_format(boxes: tf.Tensor) -> tf.Tensor:
     """
     Convert xmin, ymin, xmax, ymax boxes to ymin, xmin, ymax, xmax
     and viceversa
@@ -129,7 +128,7 @@ def clip_boxes(boxes: tf.Tensor,
 
 def single_image_nms(boxes: tf.Tensor, 
                      scores: tf.Tensor,
-                     score_threshold: float = 0.05):
+                     score_threshold: float = 0.05) -> tf.Tensor:
 
     """
     Perform detection filters using Non maxima supression on the predictions of
@@ -146,7 +145,7 @@ def single_image_nms(boxes: tf.Tensor,
         N indices pairs of box_idx, label. 
         Get box indices with indices[:,0] and labels by [:,1]
     """
-    def per_class_nms(class_idx):
+    def per_class_nms(class_idx: int) -> tf.Tensor:
         class_scores = tf.gather(scores, class_idx, axis=-1)
         
         indices = tf.image.non_max_suppression(
@@ -166,7 +165,9 @@ def single_image_nms(boxes: tf.Tensor,
 
 def nms(boxes: tf.Tensor, 
         class_scores: tf.Tensor,
-        score_threshold: float = 0.5) -> tf.Tensor:
+        score_threshold: float = 0.5) -> Tuple[Sequence[tf.Tensor], 
+                                               Sequence[tf.Tensor], 
+                                               Sequence[tf.Tensor]]:
 
     """
     Parameters
@@ -187,9 +188,7 @@ def nms(boxes: tf.Tensor,
         boxes List[tf.Tensor of shape [N, 4]]
         labels: List[tf.Tensor of shape [N]]
         scores: List[tf.Tensor of shape [N]]
-    """
-    iou_threshold = .5
-    
+    """    
     batch_size = tf.shape(boxes)[0]
     num_classes = tf.shape(class_scores)[-1]
     
@@ -217,7 +216,7 @@ def nms(boxes: tf.Tensor,
     return all_boxes, all_labels, all_scores
     
 
-def bbox_overlap(boxes, gt_boxes):
+def bbox_overlap(boxes: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     """
     Calculates the overlap between proposal and ground truth boxes.
     Some `gt_boxes` may have been padded. The returned `iou` tensor for these

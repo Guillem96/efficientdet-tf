@@ -1,4 +1,5 @@
 import click
+from typing import Any
 
 import tensorflow as tf
 
@@ -15,7 +16,7 @@ import efficientdet
 @click.option('--format', type=click.Choice(['VOC', 'labelme']),
               required=True, help='Dataset to use for training')
 
-def main(**kwargs):
+def main(**kwargs: Any) -> None:
 
     model, params = efficientdet.checkpoint.load(
         kwargs['checkpoint'], score_threshold=kwargs['score'])
@@ -28,7 +29,7 @@ def main(**kwargs):
     
     # load image
     im_size = model.config.input_size
-    im = efficientdet.utils.io.load_image(kwargs['image'], (im_size,) * 2)
+    im = efficientdet.utils.io.load_image(kwargs['image'], im_size)
     norm_image = efficientdet.data.preprocess.normalize_image(im)
 
     boxes, labels, scores = model(tf.expand_dims(norm_image, axis=0), 

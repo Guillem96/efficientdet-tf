@@ -17,7 +17,7 @@ class PretrainedTest(unittest.TestCase):
         model = EfficientDet.from_pretrained('D0-VOC', 
                                              score_threshold=.6)
         print('Done loading...')
-        image = io.load_image('imgs/cat-dog.jpg', (model.config.input_size,) * 2)
+        image = io.load_image('imgs/cat-dog.jpg', model.config.input_size)
         n_image = normalize_image(image)
         n_image = tf.expand_dims(n_image, axis=0)
 
@@ -41,7 +41,7 @@ class PretrainedTest(unittest.TestCase):
         print('Done loading...')
         image = io.load_image(
             'imgs/cat-dog.jpg', 
-            (model.config.input_size,) * 2)
+            model.config.input_size)
         n_image = normalize_image(image)
         n_image = tf.expand_dims(n_image, axis=0)
 

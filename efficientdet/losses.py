@@ -6,10 +6,10 @@ import tensorflow as tf
 
 def focal_loss(y_true: tf.Tensor,
                y_pred: tf.Tensor,
-               gamma: int = 1.5,
+               gamma: float = 1.5,
                alpha: float = 0.25,
                from_logits: bool = False,
-               reduction: str = 'sum'):
+               reduction: str = 'sum') -> tf.Tensor:
 
     if from_logits:
         y_pred = tf.sigmoid(y_pred)
@@ -37,7 +37,7 @@ def focal_loss(y_true: tf.Tensor,
 def huber_loss(y_true: tf.Tensor, 
                y_pred: tf.Tensor, 
                clip_delta: float = 1.0,
-               reduction: str = 'sum'):
+               reduction: str = 'sum') -> tf.Tensor:
 
     y_pred = tf.cast(y_pred, tf.float32)
     y_true = tf.cast(y_true, tf.float32)
@@ -68,17 +68,13 @@ class _EfficientDetLoss(abc.ABC, tf.keras.losses.Loss):
     
     @abc.abstractproperty
     def is_clf(self) -> tf.Tensor:
-        raise NotImplemented
+        raise NotImplementedError
     
     @abc.abstractproperty
     def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        raise NotImplemented
+        raise NotImplementedError
 
     def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
-        y_shape = tf.shape(y_true)
-        batch = y_shape[0]
-        n_anchors = y_shape[1]
-
         anchors_states = y_true[:, :, -1]
         not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
         true_idx = tf.where(tf.equal(anchors_states, 1.))

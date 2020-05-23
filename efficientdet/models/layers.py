@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Any, Tuple, Sequence
 
 import tensorflow as tf
 
@@ -8,7 +8,7 @@ from efficientdet.utils import bndbox, anchors
 
 class Resize(tf.keras.Model):
 
-    def __init__(self, features: int, prefix: str = ''):
+    def __init__(self, features: int, prefix: str = '') -> None:
         super(Resize, self).__init__()
         self.antialiasing_conv = ConvBlock(features,
                                            separable=True,
@@ -20,8 +20,7 @@ class Resize(tf.keras.Model):
              images: tf.Tensor, 
              target_dim: Tuple[int, int, int, int] = None, 
              training: bool = True) -> tf.Tensor:
-        h = target_dim[1]
-        w = target_dim[2]
+        h, w = target_dim[1], target_dim[2] # type: ignore[index]
 
         x = tf.image.resize(images, [h, w], method='nearest')
         x = self.antialiasing_conv(x, training=training)
@@ -35,7 +34,7 @@ class ConvBlock(tf.keras.Model):
                  separable: bool = False, 
                  activation: str = None,
                  prefix: str = '',
-                 **kwargs):
+                 **kwargs: Any) -> None:
         super(ConvBlock, self).__init__()
 
 
@@ -92,7 +91,10 @@ class FilterDetections(object):
     def __call__(self, 
                  images: tf.Tensor, 
                  regressors: tf.Tensor, 
-                 class_scores: tf.Tensor):
+                 class_scores: tf.Tensor) -> Tuple[Sequence[tf.Tensor], 
+                                                   Sequence[tf.Tensor], 
+                                                   Sequence[tf.Tensor]]:
+
         im_shape = tf.shape(images)
         batch_size, h, w = im_shape[0], im_shape[1], im_shape[2]
         num_classes = tf.shape(class_scores)[-1]
@@ -110,7 +112,7 @@ class FilterDetections(object):
         boxes = self.regress_boxes(anchors, regressors)
         boxes = self.clip_boxes(boxes, [h, w])
 
-        # Supress overlapping detections
+        # Suppress overlapping detections
         boxes, labels, scores = bndbox.nms(
             boxes, class_scores, score_threshold=self.score_threshold)
 

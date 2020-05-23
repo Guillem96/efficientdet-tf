@@ -1,12 +1,7 @@
-import random
-from typing import Tuple
-
 import tensorflow as tf
 
+from efficientdet.typing import Annotation, ObjectDetectionInstance
 import efficientdet.utils.bndbox as bb_utils
-
-
-_Annots = Tuple[tf.Tensor, tf.Tensor]
 
 
 def normalize_image(image: tf.Tensor) -> tf.Tensor:
@@ -48,7 +43,7 @@ def unnormalize_image(image: tf.Tensor) -> tf.Tensor:
 
 
 def horizontal_flip(image: tf.Tensor, 
-                    annots: _Annots) -> Tuple[tf.Tensor, _Annots]:
+                    annots: Annotation) -> ObjectDetectionInstance:
     labels, boxes = annots
 
     # Flip the image
@@ -70,7 +65,7 @@ def horizontal_flip(image: tf.Tensor,
 
 
 def crop(image: tf.Tensor, 
-         annots: _Annots) -> Tuple[tf.Tensor, _Annots]:
+         annots: Annotation) -> ObjectDetectionInstance:
     
     labels, boxes = annots
 
@@ -131,19 +126,18 @@ def crop(image: tf.Tensor,
 
     # Scale the boxes to original image
     boxes = bb_utils.scale_boxes(
-        boxes, tuple(image.shape[:-1]), (crop_height, crop_width))
+        boxes, image.shape[:-1], (crop_height, crop_width))
 
     return crop_im, (labels, boxes)
 
 
-def no_transform(image, annots):
+def no_transform(image: tf.Tensor, 
+                 annots: Annotation) -> ObjectDetectionInstance:
     return image, annots
 
 
 def augment(image: tf.Tensor, 
-            annots: Tuple[tf.Tensor, tf.Tensor]) -> Tuple[tf.Tensor, 
-                                                          tf.Tensor, 
-                                                          tf.Tensor]:
+            annots: Annotation) -> ObjectDetectionInstance:
 
     image, annots = tf.cond(tf.random.uniform([1]) < .5,
                             lambda: horizontal_flip(image, annots),

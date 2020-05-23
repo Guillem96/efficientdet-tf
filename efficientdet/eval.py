@@ -1,4 +1,5 @@
 import click
+from typing import Any
 
 import efficientdet
 from efficientdet import coco
@@ -11,12 +12,12 @@ from efficientdet import coco
               type=click.Path(), required=True)
 
 @click.pass_context
-def main(ctx, **kwargs):
+def main(ctx: click.Context, **kwargs: Any) -> None:
 
     model, params = efficientdet.checkpoint.load(
         kwargs['checkpoint'])
         
-    params = {}
+    params: dict = {}
 
     ctx.ensure_object(dict)
     ctx.obj['common'] = kwargs
@@ -36,13 +37,13 @@ def main(ctx, **kwargs):
               required=True,
               help='path to file containing a class for line')
 @click.pass_context
-def labelme(ctx, **kwargs):
+def labelme(ctx: click.Context, **kwargs: Any) -> None:
     kwargs.update(ctx.obj['common'])
-    model, params = ctx.obj['model'], ctx.obj['params']
+    model, _ = ctx.obj['model'], ctx.obj['params']
     config = model.config
-    im_size = (config.input_size,) * 2
+    im_size = config.input_size
 
-    classes, class2idx  = efficientdet.utils.io.read_class_names(
+    _, class2idx  = efficientdet.utils.io.read_class_names(
         kwargs['classes_file'])
 
     ds = efficientdet.data.labelme.build_dataset(
@@ -71,15 +72,15 @@ def labelme(ctx, **kwargs):
 @click.option('--root-test', type=click.Path(file_okay=False, exists=True),
               required=True, help='Path to annotations and images')
 @click.pass_context
-def VOC(ctx, **kwargs):
+def VOC(ctx: click.Context, **kwargs: Any) -> None:
     kwargs.update(ctx.obj['common'])
-    model, params = ctx.obj['model'], ctx.obj['params']
+    model, _ = ctx.obj['model'], ctx.obj['params']
     config = model.config
-    im_size = (config.input_size,) * 2
+    im_size = config.input_size
 
     class2idx = efficientdet.data.voc.LABEL_2_IDX
 
-    im_size = (config.input_size,) * 2
+    im_size = config.input_size
     ds = efficientdet.data.voc.build_dataset(
         kwargs['root_test'],
         im_input_size=im_size,
@@ -97,6 +98,7 @@ def VOC(ctx, **kwargs):
         dataset=ds,
         steps=sum(1 for _ in ds),
         gtCOCO=gtCOCO)
+
 
 if __name__ == "__main__":
     main()
