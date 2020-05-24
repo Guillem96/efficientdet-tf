@@ -94,17 +94,23 @@ def regress_bndboxes(boxes: tf.Tensor,
     """ 
     boxes = tf.cast(boxes, tf.float32)
     regressors = tf.cast(regressors, tf.float32)
-    
-    mean = tf.constant([0., 0., 0., 0.], dtype=tf.float32)
-    std = tf.constant([0.2, 0.2, 0.2, 0.2], dtype=tf.float32)
 
-    width  = boxes[:, :, 2] - boxes[:, :, 0]
-    height = boxes[:, :, 3] - boxes[:, :, 1]
+    Px = (boxes[..., 0] + boxes[..., 2]) / 2.
+    Py = (boxes[..., 1] + boxes[..., 3]) / 2.
+    Pw = boxes[..., 2] - boxes[..., 0]
+    Ph = boxes[..., 3] - boxes[..., 1]
 
-    x1 = boxes[:, :, 0] + (regressors[:, :, 0] * std[0] + mean[0]) * width
-    y1 = boxes[:, :, 1] + (regressors[:, :, 1] * std[1] + mean[1]) * height
-    x2 = boxes[:, :, 2] + (regressors[:, :, 2] * std[2] + mean[2]) * width
-    y2 = boxes[:, :, 3] + (regressors[:, :, 3] * std[3] + mean[3]) * height
+    dxP, dyP, dwP, dhP = tf.split(regressors, 4, axis=1)
+
+    Gx_hat = Pw * dxP + Px
+    Gy_hat = Ph * dyP + Py
+    Gw_hat = Pw * tf.math.exp(dwP)
+    Gh_hat = Ph * tf.math.exp(dhP)
+
+    x1 = Gx_hat - (Gw_hat / 2.)
+    y1 = Gy_hat - (Gh_hat / 2.)
+    x2 = x1 + Gw_hat
+    y2 = y1 + Gh_hat
 
     return tf.stack([x1, y1, x2, y2], axis=2)
 
