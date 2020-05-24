@@ -291,23 +291,24 @@ def compute_gt_annotations(anchors: tf.Tensor,
 def bbox_transform(anchors: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     """Compute bounding-box regression targets for an image."""
 
-    mean = tf.constant([0., 0., 0., 0.])
-    std = np.array([0.2, 0.2, 0.2, 0.2])
-
     anchors = tf.cast(anchors, tf.float32)
     gt_boxes = tf.cast(gt_boxes, tf.float32)
 
-    anchor_widths  = anchors[..., 2] - anchors[..., 0]
-    anchor_heights = anchors[..., 3] - anchors[..., 1]
+    Px = (anchors[..., 0] + anchors[..., 2]) / 2.
+    Py = (anchors[..., 1] + anchors[..., 3]) / 2.
+    Pw = anchors[..., 2] - anchors[..., 0]
+    Ph = anchors[..., 3] - anchors[..., 1]
 
-    targets_dx1 = (gt_boxes[..., 0] - anchors[..., 0]) / anchor_widths
-    targets_dy1 = (gt_boxes[..., 1] - anchors[..., 1]) / anchor_heights
-    targets_dx2 = (gt_boxes[..., 2] - anchors[..., 2]) / anchor_widths
-    targets_dy2 = (gt_boxes[..., 3] - anchors[..., 3]) / anchor_heights
+    Gx = (gt_boxes[..., 0] + gt_boxes[..., 2]) / 2.
+    Gy = (gt_boxes[..., 1] + gt_boxes[..., 3]) / 2.
+    Gw = gt_boxes[..., 2] - gt_boxes[..., 0]
+    Gh = gt_boxes[..., 3] - gt_boxes[..., 1]
 
-    targets = tf.stack(
-        [targets_dx1, targets_dy1, targets_dx2, targets_dy2], axis=-1)
-
-    targets = (targets - mean) / std
+    tx = (Gx - Px) / Pw
+    ty = (Gy - Py) / Ph
+    tw = tf.math.log(Gw / Pw)
+    th = tf.math.log(Gh / Ph)
+    
+    targets = tf.stack([tx, ty, tw, th], axis=-1)
 
     return targets

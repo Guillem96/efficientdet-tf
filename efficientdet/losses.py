@@ -2,6 +2,7 @@ import abc
 from typing import Callable
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 
 def focal_loss(y_true: tf.Tensor,
@@ -81,6 +82,7 @@ class _EfficientDetLoss(abc.ABC, tf.keras.losses.Loss):
 
         normalizer = tf.shape(true_idx)[0]
         normalizer = tf.cast(normalizer, tf.float32)
+        normalizer = tf.maximum(tf.constant(1., dtype=tf.float32), normalizer)
 
         # We only regress true boxes, but we classify positive and negative
         # instances
@@ -99,14 +101,17 @@ class EfficientDetFocalLoss(_EfficientDetLoss):
 
     @property
     def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        return focal_loss
+        return tfa.losses.SigmoidFocalCrossEntropy(
+            alpha=0.25, gamma=1.5,
+            reduction=tf.losses.Reduction.SUM)
 
 
 class EfficientDetHuberLoss(_EfficientDetLoss):
 
     @property
-    def is_clf(self) -> tf.Tensor: return tf.constant(False, dtype=tf.bool)
+    def is_clf(self) -> tf.Tensor: 
+        return tf.constant(False, dtype=tf.bool)
 
     @property
     def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        return tf.losses.Huber(reduction=tf.losses.Reduction.SUM)
+        return tf.losses.Huber(reduction=tf.losses.Reduction.SUM, delta=3.0)

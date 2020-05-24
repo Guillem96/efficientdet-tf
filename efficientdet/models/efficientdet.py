@@ -149,6 +149,14 @@ class EfficientDet(tf.keras.Model):
                     self.config.Wbifpn, self.config.Dclass,
                     num_classes=num_classes, prefix='class_head/')
 
+    @property
+    def score_threshold(self) -> float:
+        return self.filter_detections.score_threshold
+    
+    @score_threshold.setter
+    def score_threshold(self, value: float) -> None:
+        self.filter_detections.score_threshold = value
+
     def call(self, 
              images: tf.Tensor, 
              training: bool = True) -> Union[TrainingOut, InferenceOut]:
