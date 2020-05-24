@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Union, Any, Tuple
 from urllib.parse import urlparse
 
-from efficientdet import EfficientDet
+from efficientdet.models import EfficientDet
 
 
 def _md5(fname: Union[Path, str]) -> str:

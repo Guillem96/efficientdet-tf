@@ -42,7 +42,7 @@ class FastFusion(tf.keras.layers.Layer):
         resampled_feature = self.resize(
             inputs[-1], tf.shape(inputs[0]), training=training)
 
-        resampled_features = inputs[:-1] + resampled_feature
+        resampled_features = inputs[:-1] + [resampled_feature]
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
@@ -54,7 +54,7 @@ class FastFusion(tf.keras.layers.Layer):
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
-        weighted_sum = tf.add_n(weighted_inputs, axis=0)
+        weighted_sum = tf.add_n(weighted_inputs)
         return self.conv(weighted_sum, training=training)
         
 

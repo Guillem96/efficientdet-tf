@@ -5,6 +5,7 @@ from typing import Mapping, Any
 import click
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 import efficientdet
 from .callbacks import COCOmAPCallback
@@ -55,9 +56,9 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     else:
         lr = kwargs['learning_rate']
 
-    optimizer = tf.optimizers.SGD(
-        learning_rate=lr,
-        momentum=0.9)
+    optimizer = tfa.optimizers.SGDW(learning_rate=lr,
+                                    momentum=0.9, 
+                                    weight_decay=4e-5)
 
     # Declare loss functions
     regression_loss_fn = efficientdet.losses.EfficientDetHuberLoss()
@@ -90,7 +91,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
                                  validate_every=kwargs['validate_freq']),
                  tf.keras.callbacks.ModelCheckpoint(weights_file)]
 
-    model.fit(wrapped_ds.repeat(), 
+    model.fit(wrapped_ds.repeat(),
               validation_data=wrapped_val_ds, 
               steps_per_epoch=steps_per_epoch,
               validation_steps=validation_steps,

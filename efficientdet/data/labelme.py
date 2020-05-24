@@ -42,6 +42,7 @@ def _load_labelme_instance(
     # Reads a labelme annotation and returns
     # a list of tuples containing the ground 
     # truth boxes and its respective label
+
     with Path(annot_path).open() as f:
         annot = json.load(f)
 
@@ -50,7 +51,8 @@ def _load_labelme_instance(
 
     image_path = Path(images_base_path) / annot['imagePath']
     image = io_utils.load_image(str(image_path), 
-                                im_input_size, normalize_image=True)
+                                im_input_size, 
+                                normalize_image=True)
     
     w, h = annot['imageWidth'], annot['imageHeight']
 
@@ -90,7 +92,6 @@ def _labelme_gen(
 def _scale_boxes(image: tf.Tensor, 
                  annots: Annotation,
                  to_size: Tuple[int, int]) -> ObjectDetectionInstance:
-    
     # Wrapper function to call scale_boxes on tf dataset pipeline
     h, w = to_size[0], to_size[1]
     labels = annots[0]
@@ -163,12 +164,12 @@ def build_dataset(annotations_path: Union[str, Path],
                                      im_input_size, 
                                      class2idx)
     output_shapes = (tf.TensorShape([*im_input_size, 3]), 
-                     tf.TensorShape([None]),
-                     tf.TensorShape([None, 4]))
+                     (tf.TensorShape([None]),
+                      tf.TensorShape([None, 4])))
 
     ds = (tf.data.Dataset
           .from_generator(generator=generator, 
-                          output_types=(tf.float32, tf.int32, tf.float32),
+                          output_types=(tf.float32, (tf.int32, tf.float32)),
                           output_shapes=output_shapes)
           .map(scale_boxes))
 
