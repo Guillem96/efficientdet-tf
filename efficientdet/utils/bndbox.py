@@ -100,7 +100,10 @@ def regress_bndboxes(boxes: tf.Tensor,
     Pw = boxes[..., 2] - boxes[..., 0]
     Ph = boxes[..., 3] - boxes[..., 1]
 
-    dxP, dyP, dwP, dhP = tf.split(regressors, 4, axis=1)
+    dxP = regressors[..., 0]
+    dyP = regressors[..., 1]
+    dwP = regressors[..., 2]
+    dhP = regressors[..., 3]
 
     Gx_hat = Pw * dxP + Px
     Gy_hat = Ph * dyP + Py
