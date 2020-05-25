@@ -15,18 +15,27 @@ class RetinaNetBBPredictor(tf.keras.Model):
                  prefix: str = ''):
         super(RetinaNetBBPredictor, self).__init__()
         self.num_anchors = num_anchors
+
         self.feature_extractors = [
-            layers.ConvBlock(width, 
-                             kernel_size=3,
-                             activation='swish',
-                             padding='same',
-                             prefix=prefix + f'conv_block_{i}/')
+            layers.ConvBlock(
+                width, 
+                kernel_size=3,
+                activation='swish',
+                padding='same',
+                separable=True,
+                pointwise_initializer=tf.initializers.VarianceScaling(),
+                depthwise_initializer=tf.initializers.VarianceScaling(),
+                prefix=prefix + f'conv_block_{i}/')
             for i in range(depth)]
 
-        self.bb_regressor = tf.keras.layers.Conv2D(num_anchors * 4,
-                                                   kernel_size=3,
-                                                   padding='same',
-                                                   name=prefix + 'regress_conv')
+        self.bb_regressor = tf.keras.layers.SeparableConv2D(
+            num_anchors * 4,
+            depth_multiplier=1,
+            pointwise_initializer=tf.initializers.VarianceScaling(),
+            depthwise_initializer=tf.initializers.VarianceScaling(),
+            kernel_size=3,
+            padding='same',
+            name=prefix + 'regress_conv')
 
     def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
@@ -49,21 +58,31 @@ class RetinaNetClassifier(tf.keras.Model):
         self.num_classes = num_classes
 
         self.feature_extractors = [
-            layers.ConvBlock(width, 
-                             kernel_size=3,
-                             activation='swish',
-                             padding='same',
-                             prefix=prefix + f'conv_block_{i}/')
+            layers.ConvBlock(
+                width, 
+                kernel_size=3,
+                activation='swish',
+                padding='same',
+                prefix=prefix + f'conv_block_{i}/',
+                separable=True,
+                pointwise_initializer=tf.initializers.VarianceScaling(),
+                depthwise_initializer=tf.initializers.VarianceScaling(),
+                bias_initializer='zeros')
+
             for i in range(depth)]
         
         prob = 0.01
         w_init = tf.constant_initializer(-math.log((1 - prob) / prob))
-        self.cls_score = tf.keras.layers.Conv2D(num_anchors * num_classes,
-                                                kernel_size=3,
-                                                activation='sigmoid',
-                                                padding='same',
-                                                bias_initializer=w_init,
-                                                name=prefix + 'clf_conv')
+        self.cls_score = tf.keras.layers.SeparableConv2D(
+            num_anchors * num_classes,
+            kernel_size=3,
+            depth_multiplier=1,
+            pointwise_initializer=tf.initializers.VarianceScaling(),
+            depthwise_initializer=tf.initializers.VarianceScaling(),
+            activation='sigmoid',
+            padding='same',
+            bias_initializer=w_init,
+            name=prefix + 'clf_conv')
 
     def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
         batch_size = tf.shape(features)[0]

@@ -14,10 +14,10 @@ class FastFusion(tf.keras.layers.Layer):
         super(FastFusion, self).__init__()
 
         self.size = size
-        w_init = tf.keras.initializers.constant(1. / size)
-        self.w = tf.Variable(name=prefix + 'w', 
-                             initial_value=w_init(shape=(size,)),
-                             trainable=True)
+        self.w = self.add_weight(name=prefix + 'w',
+                                 shape=(size,),
+                                 initializer=tf.initializers.Ones(),
+                                 trainable=True)
         self.relu = tf.keras.layers.Activation('relu', name=prefix + 'relu')
         
         self.conv = layers.ConvBlock(features,
@@ -58,7 +58,7 @@ class FastFusion(tf.keras.layers.Layer):
         return self.conv(weighted_sum, training=training)
         
 
-class BiFPNBlock(tf.keras.Model):
+class BiFPNBlock(tf.keras.layers.Layer):
 
     def __init__(self, features: int, prefix: str = '') -> None:
         super(BiFPNBlock, self).__init__()
@@ -95,7 +95,7 @@ class BiFPNBlock(tf.keras.Model):
         Parameters
         ----------
         features: List[tf.Tensor]
-            Feature maps of each convolutional stage of the
+            Feature maps of each convolution stage of the
             backbone neural network
         """
         P3, P4, P5, P6, P7 = features

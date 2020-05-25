@@ -115,7 +115,7 @@ def regress_bndboxes(boxes: tf.Tensor,
     x2 = x1 + Gw_hat
     y2 = y1 + Gh_hat
 
-    return tf.stack([x1, y1, x2, y2], axis=2)
+    return tf.stack([x1, y1, x2, y2], axis=-1)
 
 
 def clip_boxes(boxes: tf.Tensor, 

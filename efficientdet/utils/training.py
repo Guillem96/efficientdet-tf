@@ -7,6 +7,7 @@ from .. import config
 from . import anchors as anchors_utils
 from ..typing import ObjectDetectionInstance
 
+
 def _compute_gt(images: tf.Tensor, 
                 annots: Tuple[tf.Tensor, tf.Tensor], 
                 anchors: tf.Tensor,
