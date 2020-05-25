@@ -146,5 +146,5 @@ def augment(image: tf.Tensor,
     image, annots = tf.cond(tf.random.uniform([1]) < .5,
                             lambda: crop(image, annots),
                             lambda: no_transform(image, annots))
-                            
+
     return image, annots

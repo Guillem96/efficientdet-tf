@@ -176,8 +176,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     h = tf.cast(im_shape[1], tf.float32)
     w = tf.cast(im_shape[2], tf.float32) 
 
-    n_anchors = tf.shape(anchors)[0]
-
     result = compute_gt_annotations(anchors, 
                                     bndboxes,
                                     negative_overlap, 
@@ -188,15 +186,21 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     x_anchor_centre = (anchors[:, 0] + anchors[:, 2]) / 2.
     y_anchor_centre = (anchors[:, 1] + anchors[:, 3]) / 2.
 
-    out_x = tf.greater_equal(x_anchor_centre, w)
-    out_y = tf.greater_equal(y_anchor_centre, h)
+    larger_x = tf.greater_equal(x_anchor_centre, w)
+    lesser_x = tf.less(x_anchor_centre, 0)
+    out_x = tf.logical_or(larger_x, lesser_x)
+
+    larger_y = tf.greater_equal(y_anchor_centre, h)
+    lesser_y = tf.less(y_anchor_centre, 0)
+    out_y = tf.logical_or(larger_y, lesser_y)
+
     out_mask = tf.logical_or(out_x, out_y)
     ignore_indices = tf.logical_or(ignore_indices, out_mask)
 
     # Gather classification labels
     chose_labels = tf.gather_nd(labels, argmax_overlaps_inds)
     chose_labels = tf.reshape(chose_labels, [batch_size, -1])
-    
+
     # Labels per anchor 
     # if is positive index add the class, else 0
     # To ignore the label add -1
@@ -209,7 +213,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     # Add regression for each anchor
     chose_bndboxes = tf.gather_nd(bndboxes, argmax_overlaps_inds)
     chose_bndboxes = tf.reshape(chose_bndboxes, [batch_size, -1, 4])
-    regression_per_anchor = tf.zeros([batch_size, n_anchors, 4])
     regression_per_anchor = bbox_transform(anchors, chose_bndboxes)
     
     # Generate extra label to add the state of the label. 
@@ -269,15 +272,15 @@ def compute_gt_annotations(anchors: tf.Tensor,
     max_overlaps = tf.reduce_max(overlaps, axis=-1)
     
     # Generate index like [batch_idx, max_overlap]	
-    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32) 	
-    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 	
-                                  batched_indices)	
-    batched_indices = tf.reshape(batched_indices, [-1, 1])	
-    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])	
-    batched_indices = tf.concat([batched_indices, argmax_inds], -1)	
+    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32)
+    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1),
+                                  batched_indices)
+    batched_indices = tf.reshape(batched_indices, [-1, 1])
+    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])
+    batched_indices = tf.concat([batched_indices, argmax_inds], -1)
 
     # Assign positive indices. 
-    positive_indices = tf.greater_equal(max_overlaps, positive_overlap) 
+    positive_indices = tf.greater_equal(max_overlaps, positive_overlap)
     
     # Assign ignored boxes
     ignore_indices = tf.greater(max_overlaps, negative_overlap)
@@ -310,5 +313,5 @@ def bbox_transform(anchors: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     th = tf.math.log(Gh / Ph)
     
     targets = tf.stack([tx, ty, tw, th], axis=-1)
-
+    
     return targets

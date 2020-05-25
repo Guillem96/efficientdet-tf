@@ -56,9 +56,9 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     else:
         lr = kwargs['learning_rate']
 
-    optimizer = tfa.optimizers.SGDW(learning_rate=lr,
-                                    momentum=0.9, 
-                                    weight_decay=4e-5)
+    optimizer = tfa.optimizers.AdamW(learning_rate=lr,
+                                    # momentum=0.9, 
+                                     weight_decay=4e-5)
 
     # Declare loss functions
     regression_loss_fn = efficientdet.losses.EfficientDetHuberLoss()
@@ -73,7 +73,8 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
         num_classes=len(class2idx))
     
     model.compile(loss=[regression_loss_fn, clf_loss_fn], 
-                  optimizer=optimizer)
+                  optimizer=optimizer,
+                  loss_weights=[1., 1.])
 
     # Mock calls to create model specs
     model.build([None, *im_size, 3])
@@ -96,7 +97,8 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
               steps_per_epoch=steps_per_epoch,
               validation_steps=validation_steps,
               epochs=kwargs['epochs'],
-              callbacks=callbacks)
+              callbacks=callbacks,
+              shuffle=False)
 
 
 @click.group()

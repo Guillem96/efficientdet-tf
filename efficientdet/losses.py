@@ -5,6 +5,8 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 
+from .utils import bndbox
+
 def focal_loss(y_true: tf.Tensor,
                y_pred: tf.Tensor,
                gamma: float = 1.5,
@@ -25,7 +27,6 @@ def focal_loss(y_true: tf.Tensor,
     pt = tf.where(tf.equal(y_true, 1.), y_pred, 1 - y_pred)
     
     loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
-    loss = tf.reduce_sum(loss, axis=-1)
     
     if reduction == 'mean':
         return tf.reduce_mean(loss)
@@ -60,23 +61,19 @@ def huber_loss(y_true: tf.Tensor,
     return loss
 
 
-class _EfficientDetLoss(abc.ABC, tf.keras.losses.Loss):
-    
-    def __init__(self) -> None:
-        super(_EfficientDetLoss, self).__init__()
-        self.name = 'efficientdet_loss_'
-        self.name += 'clf' if self.is_clf else 'reg'
-    
-    @abc.abstractproperty
-    def is_clf(self) -> tf.Tensor:
-        raise NotImplementedError
-    
-    @abc.abstractproperty
-    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        raise NotImplementedError
-
+class EfficientDetFocalLoss(tf.keras.losses.Loss):
+    def __init__(self, alpha: float = 0.25, gamma: float = 1.5) -> None:
+        super(EfficientDetFocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.loss_fn = tfa.losses.SigmoidFocalCrossEntropy(
+            alpha=self.alpha, gamma=self.gamma,
+            reduction=tf.losses.Reduction.SUM)
+        
     def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         anchors_states = y_true[:, :, -1]
+        labels = y_true[:, :, :-1]
+
         not_ignore_idx = tf.where(tf.not_equal(anchors_states, -1.))
         true_idx = tf.where(tf.equal(anchors_states, 1.))
 
@@ -84,34 +81,34 @@ class _EfficientDetLoss(abc.ABC, tf.keras.losses.Loss):
         normalizer = tf.cast(normalizer, tf.float32)
         normalizer = tf.maximum(tf.constant(1., dtype=tf.float32), normalizer)
 
-        # We only regress true boxes, but we classify positive and negative
-        # instances
-        indexer = tf.cond(self.is_clf, lambda: not_ignore_idx, lambda: true_idx)
-
-        y_true = tf.gather_nd(y_true[:, :, :-1], indexer)
-        y_pred = tf.gather_nd(y_pred, indexer)
+        y_true = tf.gather_nd(labels, not_ignore_idx)
+        y_pred = tf.gather_nd(y_pred, not_ignore_idx)
 
         return tf.divide(self.loss_fn(y_true, y_pred), normalizer)
 
 
-class EfficientDetFocalLoss(_EfficientDetLoss):
+class EfficientDetHuberLoss(tf.keras.losses.Loss):
 
-    @property
-    def is_clf(self) -> tf.Tensor: return tf.constant(True, dtype=tf.bool)
+    def __init__(self, delta: float = 1.) -> None:
+        super(EfficientDetHuberLoss, self).__init__()
+        self.delta = delta
 
-    @property
-    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        return tfa.losses.SigmoidFocalCrossEntropy(
-            alpha=0.25, gamma=1.5,
-            reduction=tf.losses.Reduction.SUM)
+        self.loss_fn = tf.losses.Huber(
+            reduction=tf.losses.Reduction.SUM, 
+            delta=self.delta)
 
+    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+        anchors_states = y_true[:, :, -1]
+        labels = y_true[:, :, :-1]
 
-class EfficientDetHuberLoss(_EfficientDetLoss):
+        true_idx = tf.where(tf.equal(anchors_states, 1.))
 
-    @property
-    def is_clf(self) -> tf.Tensor: 
-        return tf.constant(False, dtype=tf.bool)
+        normalizer = tf.shape(true_idx)[0]
+        normalizer = tf.cast(normalizer, tf.float32)
+        normalizer = tf.maximum(tf.constant(1., dtype=tf.float32), normalizer)
+        normalizer = tf.multiply(normalizer, tf.constant(4., dtype=tf.float32))
 
-    @property
-    def loss_fn(self) -> Callable[[tf.Tensor, tf.Tensor], tf.Tensor]:
-        return tf.losses.Huber(reduction=tf.losses.Reduction.SUM, delta=3.0)
+        y_true = tf.gather_nd(labels, true_idx)
+        y_pred = tf.gather_nd(y_pred, true_idx)
+
+        return 50. * tf.divide(self.loss_fn(y_true, y_pred), normalizer)
