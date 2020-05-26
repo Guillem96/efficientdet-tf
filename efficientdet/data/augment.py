@@ -25,8 +25,8 @@ def horizontal_flip(image: tf.Tensor,
     bb_w = x2 - x1
     delta_W = tf.expand_dims(boxes[:, 0], axis=-1)
 
-    x1 = w - delta_W - bb_w
-    x2 = w - delta_W
+    x1 = tf.cast(w, tf.float32) - delta_W - bb_w
+    x2 = tf.cast(w, tf.float32) - delta_W
 
     boxes = tf.stack([x1, y1, x2, y2], axis=-1)
     boxes = tf.reshape(boxes, [-1, 4])
@@ -45,19 +45,19 @@ def crop(image: tf.Tensor,
     h, w = im_shape[0], im_shape[1]
 
     # Get random crop dims
-    crop_factor_w = tf.random.uniform(shape=(1,), minval=.4, maxval=1.)
-    crop_factor_h = tf.random.uniform(shape=(1,), minval=.4, maxval=1.)
+    crop_factor_w = tf.random.uniform(shape=[], minval=.4, maxval=1.)
+    crop_factor_h = tf.random.uniform(shape=[], minval=.4, maxval=1.)
 
-    crop_width = tf.cast(w * crop_factor_w, tf.int32)
-    crop_height = tf.cast(h * crop_factor_h, tf.int32)
+    crop_width = tf.cast(tf.cast(w, tf.float32) * crop_factor_w, tf.int32)
+    crop_height = tf.cast(tf.cast(h, tf.float32) * crop_factor_h, tf.int32)
 
     # Pick coordinates to start the crop
-    x = tf.random.uniform(shape=[1], maxval=w - crop_width, dtype=tf.int32)
-    y = tf.random.uniform(shape=[1], maxval=h - crop_height, dtype=tf.int32)
+    x = tf.random.uniform(shape=[], maxval=w - crop_width - 1, dtype=tf.int32)
+    y = tf.random.uniform(shape=[], maxval=h - crop_height - 1, dtype=tf.int32)
 
     # Crop the image and resize it back to original size
     crop_im = tf.image.crop_to_bounding_box(
-        image, x, y, crop_height, crop_width)
+        image, y, x, crop_height, crop_width)
     crop_im = tf.image.resize(crop_im, (h, w))
     
     # Clip the boxes to fit inside the crop
@@ -73,8 +73,8 @@ def crop(image: tf.Tensor,
     widths = x2 - x1
     heights = y2 - y1
 
-    x1 = x1 - y
-    y1 = y1 - x
+    x1 = x1 - x
+    y1 = y1 - y
     x2 = x1 + widths
     y2 = y1 + heights
 

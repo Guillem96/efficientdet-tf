@@ -52,8 +52,8 @@ class AugmentationTest(unittest.TestCase):
     def test_flip_horizontal(self):
         self.plot_single(aug_fn=data.augment.horizontal_flip)
 
-    # def test_crop(self):
-    #     self.plot_single(aug_fn=data.augment.crop)
+    def test_crop(self):
+        self.plot_single(aug_fn=data.augment.crop)
 
     # def test_crop(self):
     #     self.plot_single(aug_fn=data.augment.erase)
