@@ -88,8 +88,10 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
 
     callbacks = [COCOmAPCallback(val_ds, 
                                  class2idx, 
+                                 print_freq=kwargs['print_freq'],
                                  validate_every=kwargs['validate_freq']),
-                 tf.keras.callbacks.ModelCheckpoint(weights_file)]
+                 tf.keras.callbacks.ModelCheckpoint(weights_file, 
+                                                    save_best_only=True)]
 
     model.fit(wrapped_ds.repeat(),
               validation_data=wrapped_val_ds, 

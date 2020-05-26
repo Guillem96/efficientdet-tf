@@ -102,11 +102,11 @@ def load(save_dir_or_url: Union[str, Path],
         save_dir = Path(download_folder(str(save_dir_or_url)))
 
         hp_fname = save_dir / 'hp.json'
-        model_path = save_dir / 'model.tf'
+        model_path = save_dir / 'model.h5'
 
     else:
         hp_fname = Path(save_dir_or_url) / 'hp.json'
-        model_path = Path(save_dir_or_url) / 'model.tf'
+        model_path = Path(save_dir_or_url) / 'model.h5'
 
     assert hp_fname.exists()
 
@@ -114,17 +114,27 @@ def load(save_dir_or_url: Union[str, Path],
         hp = json.load(f)
 
     from efficientdet.models import EfficientDet
+    from efficientdet.config import EfficientDetCompudScaling
+
+    conf = EfficientDetCompudScaling(D=hp['efficientdet'])
 
     model = EfficientDet(
         hp['n_classes'],
         D=hp['efficientdet'],
         bidirectional=hp['bidirectional'],
-        freeze_backbone=True,
+        freeze_backbone=hp['freeze_backbone'],
+        training_mode=True,
         weights=None,
         **kwargs)
     
-    print('Loading model weights from {}...'.format(str(model_path)))
+    model.build([None, *conf.input_size, 3])
+
+    print('Loading model weights from {}...'.format(str(model_path)), end='')
     model.load_weights(str(model_path))
+    print(' done')
+    
+    model.training_mode = False
+    
     for l in model.layers:
         l.trainable = False
     model.trainable = False

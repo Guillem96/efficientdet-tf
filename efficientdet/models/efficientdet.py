@@ -138,10 +138,9 @@ class EfficientDet(tf.keras.Model):
         self.filter_detections = models.layers.FilterDetections(
             config.AnchorsConfig(), score_threshold)
 
-                    
         # Load the weights if needed
         if weights is not None and weights != 'imagenet':
-            self.load_weights(str(save_dir / 'model.tf'))
+            self.load_weights(str(save_dir / 'model.h5'))
             
             # Append a custom classifier
             if custom_head_classifier:
