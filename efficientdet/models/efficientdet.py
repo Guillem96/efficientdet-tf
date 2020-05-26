@@ -143,7 +143,10 @@ class EfficientDet(tf.keras.Model):
             tmp = training_mode
             self.training_mode = True
             self.build([None, *self.config.input_size, 3])
-            self.load_weights(str(save_dir / 'model.h5'))
+            self.load_weights(str(save_dir / 'model.h5'),
+                              by_name=True,
+                              skip_mismatch=custom_head_classifier)
+            self.training_mode = tmp
             self.training_mode = tmp
 
             # Append a custom classifier
