@@ -8,6 +8,10 @@ from . import callbacks
 
 from .models import EfficientDet
 
+from .data import voc
+from .data import labelme 
+from .data import augment
+
 from .utils import visualizer
 from .utils import checkpoint
 

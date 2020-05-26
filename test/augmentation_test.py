@@ -46,14 +46,17 @@ class AugmentationTest(unittest.TestCase):
         plt.imshow(aug_image)
         plt.axis('off')
 
+        plt.savefig('aug.png')
         plt.show(block=True)
 
     def test_flip_horizontal(self):
-        self.plot_single(aug_fn=data.preprocess.horizontal_flip)
+        self.plot_single(aug_fn=data.augment.horizontal_flip)
 
-    def test_crop(self):
-        self.plot_single(aug_fn=data.preprocess.crop)
+    # def test_crop(self):
+    #     self.plot_single(aug_fn=data.augment.crop)
 
+    # def test_crop(self):
+    #     self.plot_single(aug_fn=data.augment.erase)
 
 if __name__ == "__main__":
     unittest.main()

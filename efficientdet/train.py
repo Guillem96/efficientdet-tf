@@ -57,7 +57,6 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
         lr = kwargs['learning_rate']
 
     optimizer = tfa.optimizers.AdamW(learning_rate=lr,
-                                    # momentum=0.9, 
                                      weight_decay=4e-5)
 
     # Declare loss functions
@@ -173,13 +172,15 @@ def VOC(ctx: click.Context, **kwargs: Any) -> None:
     config = ctx.obj['config']
     save_checkpoint_dir = ctx.obj['save_checkpoint_dir']
 
-    class2idx = efficientdet.data.voc.LABEL_2_IDX
+    class2idx = efficientdet.voc.LABEL_2_IDX
     im_size = config.input_size
-    train_ds = efficientdet.data.voc.build_dataset(
+    train_ds = efficientdet.voc.build_dataset(
         kwargs['root_train'],
         im_size,
-        shuffle=True,
-        data_augmentation=True)
+        shuffle=True)
+    
+    train_ds.map(efficientdet.augment.RandomCrop())
+    train_ds.map(efficientdet.augment.RandomHorizontalFlip())
     
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 
@@ -187,11 +188,10 @@ def VOC(ctx: click.Context, **kwargs: Any) -> None:
                                      padding_values=(0., (-1, -1.)))
 
     if kwargs['root_valid'] is not None:
-        valid_ds = efficientdet.data.voc.build_dataset(
+        valid_ds = efficientdet.voc.build_dataset(
             kwargs['root_valid'],
             im_size,
-            shuffle=False, 
-            data_augmentation=False)
+            shuffle=False)
     
         valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
                                         padded_shapes=((*im_size, 3), 
@@ -232,14 +232,16 @@ def labelme(ctx: click.Context, **kwargs: Any) -> None:
 
     im_size = config.input_size
 
-    train_ds = efficientdet.data.labelme.build_dataset(
+    train_ds = efficientdet.labelme.build_dataset(
         annotations_path=kwargs['root_train'],
         images_path=kwargs['images_path'],
         class2idx=class2idx,
         im_input_size=im_size,
-        shuffle=True,
-        data_augmentation=True)
+        shuffle=True)
     
+    train_ds.map(efficientdet.augment.RandomHorizontalFlip())
+    train_ds.map(efficientdet.augment.RandomCrop())
+
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 
                                                     ((None,), (None, 4))),
@@ -252,8 +254,7 @@ def labelme(ctx: click.Context, **kwargs: Any) -> None:
             images_path=kwargs['images_path'],
             class2idx=class2idx,
             im_input_size=im_size,
-            shuffle=False,
-            data_augmentation=False)
+            shuffle=False)
         
         valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
                                          padded_shapes=((*im_size, 3), 

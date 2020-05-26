@@ -46,13 +46,12 @@ def labelme(ctx: click.Context, **kwargs: Any) -> None:
     _, class2idx  = efficientdet.utils.io.read_class_names(
         kwargs['classes_file'])
 
-    ds = efficientdet.data.labelme.build_dataset(
+    ds = efficientdet.labelme.build_dataset(
             annotations_path=kwargs['root_test'],
             images_path=kwargs['images_path'],
             class2idx=class2idx,
             im_input_size=im_size,
-            shuffle=False,
-            data_augmentation=False)
+            shuffle=False)
 
     ds = ds.padded_batch(batch_size=kwargs['batch_size'],
                          padded_shapes=((*im_size, 3), 
@@ -84,8 +83,7 @@ def VOC(ctx: click.Context, **kwargs: Any) -> None:
     ds = efficientdet.data.voc.build_dataset(
         kwargs['root_test'],
         im_input_size=im_size,
-        shuffle=False, 
-        data_augmentation=False)
+        shuffle=False)
 
     ds = ds.padded_batch(batch_size=kwargs['batch_size'],
                          padded_shapes=((*im_size, 3), 

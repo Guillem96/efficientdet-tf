@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import List
 
 import tensorflow as tf
 
@@ -30,7 +30,7 @@ class FastFusion(tf.keras.layers.Layer):
         self.resize = layers.Resize(features, prefix=prefix + 'resize/')
 
     def call(self, 
-             inputs: Sequence[tf.Tensor], 
+             inputs: List[tf.Tensor], 
              training: bool = True) -> tf.Tensor:
         """
         Parameters
@@ -86,8 +86,8 @@ class BiFPNBlock(tf.keras.layers.Layer):
                                    prefix=prefix + 'ff_3_out_P3_P4_td/')
 
     def call(self, 
-             features: Sequence[tf.Tensor], 
-             training: bool = True) -> Sequence[tf.Tensor]:
+             features: List[tf.Tensor], 
+             training: bool = True) -> List[tf.Tensor]:
         """
         Computes the feature fusion of bottom-up features comming
         from the Backbone NN
@@ -148,8 +148,8 @@ class BiFPN(tf.keras.Model):
                                   for i in range(n_blocks)]
 
     def call(self, 
-             inputs: Sequence[tf.Tensor], 
-             training: bool = True) -> Sequence[tf.Tensor]:
+             inputs: List[tf.Tensor], 
+             training: bool = True) -> List[tf.Tensor]:
         
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv

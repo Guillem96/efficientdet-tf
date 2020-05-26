@@ -14,7 +14,6 @@ import xml.etree.ElementTree as ET
 
 import efficientdet.utils.io as io_utils
 import efficientdet.utils.bndbox as bb_utils
-from .preprocess import augment
 
 
 IDX_2_LABEL = [
@@ -98,8 +97,7 @@ def _scale_boxes(labels: tf.Tensor, boxes: tf.Tensor,
 
 def build_dataset(dataset_path: Union[str, Path],
                   im_input_size: Tuple[int, int],
-                  shuffle: bool = True,
-                  data_augmentation: bool = False) -> tf.data.Dataset:
+                  shuffle: bool = True) -> tf.data.Dataset:
     """
     Create model input pipeline using tensorflow datasets
     Parameters
@@ -156,9 +154,5 @@ def build_dataset(dataset_path: Union[str, Path],
         ds = ds.shuffle(1024)
 
     ds = ds.map(load_im)
-
-    if data_augmentation:
-        ds = ds.map(augment)
-        ds = ds.filter(lambda im, a: tf.greater(tf.shape(a[0])[0], 0))
 
     return ds
