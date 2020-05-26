@@ -140,8 +140,12 @@ class EfficientDet(tf.keras.Model):
 
         # Load the weights if needed
         if weights is not None and weights != 'imagenet':
+            tmp = training_mode
+            self.training_mode = True
+            self.build([None, *self.config.input_size, 3])
             self.load_weights(str(save_dir / 'model.h5'))
-            
+            self.training_mode = tmp
+
             # Append a custom classifier
             if custom_head_classifier:
                 self.class_head = models.RetinaNetClassifier(
