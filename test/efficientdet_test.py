@@ -43,8 +43,7 @@ class EfficientDetTest(unittest.TestCase):
 
         input_size = model.config.input_size
 
-        ds = voc.build_dataset('test/data/VOC2007',
-                               im_input_size=(input_size, input_size))
+        ds = voc.build_dataset('test/data/VOC2007', im_input_size=input_size)
         images, annotations = next(iter(ds.take(1)))
         boxes, labels, scores = model(tf.expand_dims(images, 0), training=False)
         

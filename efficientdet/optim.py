@@ -10,7 +10,7 @@ class WarmupCosineDecayLRScheduler(LearningRateSchedule):
                  max_lr: float,
                  warmup_steps: int,
                  decay_steps: int,
-                 alpha: float = 0.):
+                 alpha: float = 0.) -> None:
         super(WarmupCosineDecayLRScheduler, self).__init__()
 
         self.name = 'WarmupCosineDecayLRScheduler'
@@ -24,7 +24,7 @@ class WarmupCosineDecayLRScheduler(LearningRateSchedule):
 
         self.decay_steps = int(decay_steps)
 
-    def _decay(self):
+    def _decay(self) -> tf.Tensor:
         rate = tf.subtract(self.last_step, self.warmup_steps) 
         rate = tf.divide(rate, self.decay_steps)
         rate = tf.cast(rate, tf.float32)
@@ -39,16 +39,17 @@ class WarmupCosineDecayLRScheduler(LearningRateSchedule):
         return tf.multiply(self.max_lr, decayed)
 
     @property
-    def current_lr(self):
-        return tf.cond(tf.less(self.last_step, self.warmup_steps),
-                       lambda: tf.multiply(self.linear_increase, self.last_step),
-                       lambda: self._decay())
+    def current_lr(self) -> tf.Tensor:
+        return tf.cond(
+            tf.less(self.last_step, self.warmup_steps),
+            lambda: tf.multiply(self.linear_increase, self.last_step),
+            lambda: self._decay())
 
-    def __call__(self, step):
+    def __call__(self, step: int) -> tf.Tensor:
         self.last_step = step
         return self.current_lr
 
-    def get_config(self):
+    def get_config(self) -> dict:
         config = {
             "max_lr": self.max_lr,
             "warmup_steps": self.warmup_steps,

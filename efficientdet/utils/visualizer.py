@@ -1,5 +1,5 @@
 from itertools import cycle
-from typing import Union, Tuple, Sequence
+from typing import Union, Tuple, Sequence, Mapping
 
 import numpy as np
 import tensorflow as tf
@@ -38,7 +38,7 @@ def _parse_box(box: Box) -> Box:
         return tuple(map(int, box))
 
 
-def _parse_boxes(boxes: Boxes):
+def _parse_boxes(boxes: Boxes) -> Boxes:
     if isinstance(boxes, tf.Tensor):
         boxes = boxes.numpy().astype('int32').tolist()
     elif isinstance(boxes, np.ndarray):
@@ -69,10 +69,12 @@ def colors_per_labels(labels: Sequence[str]) -> Sequence[Color]:
     import matplotlib.colors as mcolors
     
     colors = [mcolors.to_rgb(c) for c in mcolors.TABLEAU_COLORS]
-    colors = [tuple([int(255 * c) for c in color]) for color in colors]
+    colors = (tuple([int(255 * c) for c in color]) for color in colors)
     
     unique_labels = set(labels)
-    color_x_label = dict(zip(labels, cycle(colors)))
+    color_x_label: Mapping[str, Color] = dict(
+        zip(labels, cycle(colors))) # type: ignore[arg-type]
+        
     return [color_x_label[o] for o in labels]
 
 

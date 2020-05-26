@@ -1,13 +1,17 @@
 import json
 from pathlib import Path
-from typing import List, Union
+from typing import Any, Union, Tuple, Sequence, Optional
 
 import tensorflow as tf
 
 import efficientdet.config as config
-from efficientdet.utils import anchors, bndbox
 
 from efficientdet import models
+
+TrainingOut = Tuple[tf.Tensor, tf.Tensor]
+InferenceOut = Tuple[Sequence[tf.Tensor], 
+                     Sequence[tf.Tensor], 
+                     Sequence[tf.Tensor]]
 
 
 _AVAILABLE_WEIGHTS = {None, 'imagenet', 'D0-VOC'}
@@ -45,14 +49,14 @@ class EfficientDet(tf.keras.Model):
         Set to True when using model on inference. 
     """
     def __init__(self, 
-                 num_classes: int = None,
+                 num_classes: Optional[int] = None,
                  D : int = 0, 
                  bidirectional: bool = True,
                  freeze_backbone: bool = False,
                  score_threshold: float = .1,
-                 weights : str = 'imagenet',
+                 weights : Optional[str] = 'imagenet',
                  custom_head_classifier: bool = False,
-                 training_mode: bool = False):
+                 training_mode: bool = False) -> None:
                  
         super(EfficientDet, self).__init__()
 
@@ -79,9 +83,9 @@ class EfficientDet(tf.keras.Model):
         if weights != 'imagenet' and weights is not None:
             from efficientdet.utils.checkpoint import download_folder
             checkpoint_path = _WEIGHTS_PATHS[weights]
-            save_dir = download_folder(checkpoint_path)
+            save_dir = Path(download_folder(checkpoint_path))
 
-            params = json.load((save_dir/'hp.json').open())
+            params = json.load((save_dir / 'hp.json').open())
 
             # If num_classes is specified it must be the same as in the 
             # weights checkpoint except if the custom head classifier is set
@@ -109,17 +113,24 @@ class EfficientDet(tf.keras.Model):
         
         # Setup the feature extractor neck
         if bidirectional:
-            self.neck = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn)
+            self.neck = models.BiFPN(self.config.Wbifpn, self.config.Dbifpn, 
+                                     prefix='bifpn/')
         else:
             self.neck = models.FPN(self.config.Wbifpn)
 
         # Setup the heads
+        if num_classes is None:
+            raise ValueError('You have to specify the number of classes.')
+
         self.num_classes = num_classes
-        self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
-                                                     self.config.Dclass,
-                                                     num_classes)
+        self.class_head = models.RetinaNetClassifier(
+            self.config.Wbifpn,
+            self.config.Dclass,
+            num_classes=self.num_classes,
+            prefix='class_head/')
         self.bb_head = models.RetinaNetBBPredictor(self.config.Wbifpn,
-                                                   self.config.Dclass)
+                                                   self.config.Dclass,
+                                                   prefix='regress_head/')
         
         self.training_mode = training_mode
 
@@ -127,18 +138,31 @@ class EfficientDet(tf.keras.Model):
         self.filter_detections = models.layers.FilterDetections(
             config.AnchorsConfig(), score_threshold)
 
-                    
         # Load the weights if needed
         if weights is not None and weights != 'imagenet':
-            self.load_weights(str(save_dir / 'model.tf'))
-            
+            tmp = training_mode
+            self.training_mode = True
+            self.build([None, *self.config.input_size, 3])
+            self.load_weights(str(save_dir / 'model.h5'))
+            self.training_mode = tmp
+
             # Append a custom classifier
             if custom_head_classifier:
-                self.class_head = models.RetinaNetClassifier(self.config.Wbifpn,
-                                                             self.config.Dclass,
-                                                             num_classes)
+                self.class_head = models.RetinaNetClassifier(
+                    self.config.Wbifpn, self.config.Dclass,
+                    num_classes=num_classes, prefix='class_head/')
 
-    def call(self, images: tf.Tensor, training: bool = True):
+    @property
+    def score_threshold(self) -> float:
+        return self.filter_detections.score_threshold
+    
+    @score_threshold.setter
+    def score_threshold(self, value: float) -> None:
+        self.filter_detections.score_threshold = value
+
+    def call(self, 
+             images: tf.Tensor, 
+             training: bool = True) -> Union[TrainingOut, InferenceOut]:
         """
         EfficientDet forward step
 
@@ -177,7 +201,7 @@ class EfficientDet(tf.keras.Model):
     @staticmethod
     def from_pretrained(checkpoint_path: Union[Path, str], 
                         num_classes: int = None,
-                        **kwargs) -> 'EfficientDet':
+                        **kwargs: Any) -> 'EfficientDet':
         """
         Instantiates an efficientdet model with pretreined weights.
         For transfer learning, the classifier head can be overwritten by
@@ -203,7 +227,7 @@ class EfficientDet(tf.keras.Model):
             raise ValueError(f'Checkpoint {checkpoint_path} is not available')
         
         if str(checkpoint_path) in _AVAILABLE_WEIGHTS:
-            checkpoint_path = _WEIGHTS_PATHS[checkpoint_path]
+            checkpoint_path = _WEIGHTS_PATHS[str(checkpoint_path)]
 
         model, _ = load(checkpoint_path, **kwargs)
 

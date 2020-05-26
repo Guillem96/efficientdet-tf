@@ -121,7 +121,7 @@ import efficientdet
 effdet = efficientdet.EfficientDet.from_pretrained('...')
 
 im_size = model.config.input_size
-images  = tf.random.uniform((3, im_size, im_size, 3)) # 3 Mock images
+images  = tf.random.uniform((3, *im_size, 3)) # 3 Mock images
 
 boxes, labels, scores = effdet(images, training=False)
 

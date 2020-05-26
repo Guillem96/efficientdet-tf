@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import List
 
 import tensorflow as tf
 
@@ -10,26 +10,27 @@ EPSILON = 1e-5
 
 
 class FastFusion(tf.keras.layers.Layer):
-    def __init__(self, size: int, features: int):
+    def __init__(self, size: int, features: int, prefix: str = '') -> None:
         super(FastFusion, self).__init__()
 
         self.size = size
-        w_init = tf.keras.initializers.constant(1. / size)
-        self.w = tf.Variable(name='w', 
-                             initial_value=w_init(shape=(size,)),
-                             trainable=True)
-        self.relu = tf.keras.layers.Activation('relu')
+        self.w = self.add_weight(name=prefix + 'w',
+                                 shape=(size,),
+                                 initializer=tf.initializers.Ones(),
+                                 trainable=True)
+        self.relu = tf.keras.layers.Activation('relu', name=prefix + 'relu')
         
         self.conv = layers.ConvBlock(features,
                                      separable=True,
                                      kernel_size=3, 
                                      strides=1, 
                                      padding='same', 
-                                     activation='swish')
-        self.resize = layers.Resize(features)
+                                     activation='swish',
+                                     prefix=prefix + 'conv_block/')
+        self.resize = layers.Resize(features, prefix=prefix + 'resize/')
 
     def call(self, 
-             inputs: Sequence[tf.Tensor], 
+             inputs: List[tf.Tensor], 
              training: bool = True) -> tf.Tensor:
         """
         Parameters
@@ -38,44 +39,55 @@ class FastFusion(tf.keras.layers.Layer):
         """
         # The last feature map has to be resized according to the
         # other inputs
-        inputs[-1] = self.resize(
+        resampled_feature = self.resize(
             inputs[-1], tf.shape(inputs[0]), training=training)
+
+        resampled_features = inputs[:-1] + [resampled_feature]
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
         w_sum = EPSILON + tf.reduce_sum(w, axis=0)
 
         # [INPUTS, BATCH, H, W, C]
-        weighted_inputs = [w[i] * inputs[i] for i in range(self.size)]
+        weighted_inputs = [(w[i] * resampled_features[i]) / w_sum
+                           for i in range(self.size)]
 
         # Sum weighted inputs
         # (BATCH, H, W, C)
-        weighted_sum = tf.reduce_sum(weighted_inputs, axis=0) / w_sum
+        weighted_sum = tf.add_n(weighted_inputs)
         return self.conv(weighted_sum, training=training)
         
 
-class BiFPNBlock(tf.keras.Model):
+class BiFPNBlock(tf.keras.layers.Layer):
 
-    def __init__(self, features: int):
+    def __init__(self, features: int, prefix: str = '') -> None:
         super(BiFPNBlock, self).__init__()
 
         # Feature fusion for intermediate level
         # ff stands for Feature fusion
         # td refers to intermediate level
-        self.ff_6_td = FastFusion(2, features)
-        self.ff_5_td = FastFusion(2, features)
-        self.ff_4_td = FastFusion(2, features)
+        self.ff_6_td = FastFusion(2, features, 
+                                  prefix=prefix + 'ff_6_td_P6-P7_/')
+        self.ff_5_td = FastFusion(2, features,
+                                  prefix=prefix + 'ff_5_td_P5_P6_td/')
+        self.ff_4_td = FastFusion(2, features, 
+                                  prefix=prefix + 'ff_4_td_P4_P5_td/')
 
         # Feature fusion for output
-        self.ff_7_out = FastFusion(2, features)
-        self.ff_6_out = FastFusion(3, features)
-        self.ff_5_out = FastFusion(3, features)
-        self.ff_4_out = FastFusion(3, features)
-        self.ff_3_out = FastFusion(2, features)
+        self.ff_7_out = FastFusion(2, features,
+                                   prefix=prefix + 'ff_7_out_P7_P6_td/')
+        self.ff_6_out = FastFusion(3, features,
+                                   prefix=prefix + 'ff_6_out_P6_P6_td_P7_out/')
+        self.ff_5_out = FastFusion(3, features,
+                                   prefix=prefix + 'ff_5_out_P5_P5_td_P4_out/')
+        self.ff_4_out = FastFusion(3, features,
+                                   prefix=prefix + 'ff_4_out_P4_P4_td_P3_out/')
+        self.ff_3_out = FastFusion(2, features,
+                                   prefix=prefix + 'ff_3_out_P3_P4_td/')
 
     def call(self, 
-             features: Sequence[tf.Tensor], 
-             training: bool = True) -> Sequence[tf.Tensor]:
+             features: List[tf.Tensor], 
+             training: bool = True) -> List[tf.Tensor]:
         """
         Computes the feature fusion of bottom-up features comming
         from the Backbone NN
@@ -83,7 +95,7 @@ class BiFPNBlock(tf.keras.Model):
         Parameters
         ----------
         features: List[tf.Tensor]
-            Feature maps of each convolutional stage of the
+            Feature maps of each convolution stage of the
             backbone neural network
         """
         P3, P4, P5, P6, P7 = features
@@ -106,31 +118,38 @@ class BiFPNBlock(tf.keras.Model):
 
 class BiFPN(tf.keras.Model):
     
-    def __init__(self, features: int = 64, n_blocks: int = 3):
+    def __init__(self, 
+                 features: int = 64, 
+                 n_blocks: int = 3, 
+                 prefix: str = '') -> None:
         super(BiFPN, self).__init__()
 
         # One pixel-wise for each feature comming from the 
         # bottom-up path
-        self.pixel_wise = [layers.ConvBlock(features, kernel_size=1)
-                            for _ in range(3)] 
+        self.pixel_wise = [layers.ConvBlock(features, kernel_size=1, 
+                                            prefix=prefix + f'pixel_wise_{i}/')
+                            for i in range(3)] 
 
         self.gen_P6 = layers.ConvBlock(features, 
                                        kernel_size=3, 
                                        strides=2, 
-                                       padding='same')
+                                       padding='same',
+                                       prefix=prefix + 'gen_P6/')
         
-        self.relu = tf.keras.layers.Activation('relu')
+        self.relu = tf.keras.layers.Activation('relu', name=prefix + 'relu')
 
         self.gen_P7 = layers.ConvBlock(features, 
                                        kernel_size=3, 
                                        strides=2, 
-                                       padding='same')
+                                       padding='same',
+                                       prefix=prefix + 'gen_P7/')
 
-        self.blocks = [BiFPNBlock(features) for i in range(n_blocks)]
+        self.blocks = [BiFPNBlock(features, prefix=prefix + f'block_{i}/') 
+                                  for i in range(n_blocks)]
 
     def call(self, 
-             inputs: Sequence[tf.Tensor], 
-             training: bool = True) -> Sequence[tf.Tensor]:
+             inputs: List[tf.Tensor], 
+             training: bool = True) -> List[tf.Tensor]:
         
         # Each Pin has shape (BATCH, H, W, C)
         # We first reduce the channels using a pixel-wise conv
@@ -141,6 +160,7 @@ class BiFPN(tf.keras.Model):
         P7 = self.gen_P7(self.relu(P6), training=training)
 
         features = [P3, P4, P5, P6, P7]
+        
         features = tf_utils.call_cascade(self.blocks, 
                                          features, 
                                          training=training)

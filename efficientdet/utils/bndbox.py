@@ -1,16 +1,16 @@
-from functools import partial
-from typing import Tuple, List, Union
+from typing import Tuple, Sequence
 
 import tensorflow as tf
 
 
-def to_tf_format(boxes: tf.Tensor):
+def to_tf_format(boxes: tf.Tensor) -> tf.Tensor:
     """
     Convert xmin, ymin, xmax, ymax boxes to ymin, xmin, ymax, xmax
     and viceversa
     """
     y1, x1, y2, x2 = tf.split(boxes, 4, axis=-1)
     return tf.concat([x1, y1, x2, y2], axis=-1)
+
 
 def scale_boxes(boxes: tf.Tensor,
                 from_size: Tuple[int, int],
@@ -64,7 +64,9 @@ def normalize_bndboxes(boxes: tf.Tensor,
     tf.Tensor of shape [N_BOXES, 4]
         Normalized boxes with values in range [0, 1] 
     """
-    h, w = image_size
+    h = image_size[0]
+    w = image_size[1]
+
     x1, y1, x2, y2 = tf.split(boxes, 4, axis=1)
     x1 /= (w - 1)
     x2 /= (w - 1)
@@ -92,19 +94,28 @@ def regress_bndboxes(boxes: tf.Tensor,
     """ 
     boxes = tf.cast(boxes, tf.float32)
     regressors = tf.cast(regressors, tf.float32)
-    
-    mean = tf.constant([0., 0., 0., 0.], dtype=tf.float32)
-    std = tf.constant([0.2, 0.2, 0.2, 0.2], dtype=tf.float32)
 
-    width  = boxes[:, :, 2] - boxes[:, :, 0]
-    height = boxes[:, :, 3] - boxes[:, :, 1]
+    Px = (boxes[..., 0] + boxes[..., 2]) / 2.
+    Py = (boxes[..., 1] + boxes[..., 3]) / 2.
+    Pw = boxes[..., 2] - boxes[..., 0]
+    Ph = boxes[..., 3] - boxes[..., 1]
 
-    x1 = boxes[:, :, 0] + (regressors[:, :, 0] * std[0] + mean[0]) * width
-    y1 = boxes[:, :, 1] + (regressors[:, :, 1] * std[1] + mean[1]) * height
-    x2 = boxes[:, :, 2] + (regressors[:, :, 2] * std[2] + mean[2]) * width
-    y2 = boxes[:, :, 3] + (regressors[:, :, 3] * std[3] + mean[3]) * height
+    dxP = regressors[..., 0]
+    dyP = regressors[..., 1]
+    dwP = regressors[..., 2]
+    dhP = regressors[..., 3]
 
-    return tf.stack([x1, y1, x2, y2], axis=2)
+    Gx_hat = Pw * dxP + Px
+    Gy_hat = Ph * dyP + Py
+    Gw_hat = Pw * tf.math.exp(dwP)
+    Gh_hat = Ph * tf.math.exp(dhP)
+
+    x1 = Gx_hat - (Gw_hat / 2.)
+    y1 = Gy_hat - (Gh_hat / 2.)
+    x2 = x1 + Gw_hat
+    y2 = y1 + Gh_hat
+
+    return tf.stack([x1, y1, x2, y2], axis=-1)
 
 
 def clip_boxes(boxes: tf.Tensor, 
@@ -126,7 +137,7 @@ def clip_boxes(boxes: tf.Tensor,
 
 def single_image_nms(boxes: tf.Tensor, 
                      scores: tf.Tensor,
-                     score_threshold: float = 0.05):
+                     score_threshold: float = 0.05) -> tf.Tensor:
 
     """
     Perform detection filters using Non maxima supression on the predictions of
@@ -143,7 +154,7 @@ def single_image_nms(boxes: tf.Tensor,
         N indices pairs of box_idx, label. 
         Get box indices with indices[:,0] and labels by [:,1]
     """
-    def per_class_nms(class_idx):
+    def per_class_nms(class_idx: int) -> tf.Tensor:
         class_scores = tf.gather(scores, class_idx, axis=-1)
         
         indices = tf.image.non_max_suppression(
@@ -163,7 +174,9 @@ def single_image_nms(boxes: tf.Tensor,
 
 def nms(boxes: tf.Tensor, 
         class_scores: tf.Tensor,
-        score_threshold: float = 0.5) -> tf.Tensor:
+        score_threshold: float = 0.5) -> Tuple[Sequence[tf.Tensor], 
+                                               Sequence[tf.Tensor], 
+                                               Sequence[tf.Tensor]]:
 
     """
     Parameters
@@ -184,9 +197,7 @@ def nms(boxes: tf.Tensor,
         boxes List[tf.Tensor of shape [N, 4]]
         labels: List[tf.Tensor of shape [N]]
         scores: List[tf.Tensor of shape [N]]
-    """
-    iou_threshold = .5
-    
+    """    
     batch_size = tf.shape(boxes)[0]
     num_classes = tf.shape(class_scores)[-1]
     
@@ -214,7 +225,7 @@ def nms(boxes: tf.Tensor,
     return all_boxes, all_labels, all_scores
     
 
-def bbox_overlap(boxes, gt_boxes):
+def bbox_overlap(boxes: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     """
     Calculates the overlap between proposal and ground truth boxes.
     Some `gt_boxes` may have been padded. The returned `iou` tensor for these

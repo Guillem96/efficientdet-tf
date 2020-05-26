@@ -80,7 +80,6 @@ class AnchorsTest(unittest.TestCase):
     def test_regress_boxes(self):
         print('Regress anchors test')
 
-        level = 3
         ds = voc.build_dataset('test/data/VOC2007',
                                im_input_size=(512, 512))
 

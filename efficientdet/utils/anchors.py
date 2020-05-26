@@ -11,8 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import math
-from typing import List, Union, Tuple, Sequence
+from typing import Any, Tuple, Sequence
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +24,7 @@ class AnchorGenerator(object):
     def __init__(self, 
                  size: float,
                  aspect_ratios: Sequence[float],
-                 stride: int = 1):
+                 stride: int = 1) -> None:
         """
         RetinaNet input examples:
             size: 32
@@ -42,10 +41,11 @@ class AnchorGenerator(object):
 
         self.anchors = self._generate()
     
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> tf.Tensor:
         return self.tile_anchors_over_feature_map(*args, **kwargs)
 
-    def tile_anchors_over_feature_map(self, feature_map_shape):
+    def tile_anchors_over_feature_map(
+            self, feature_map_shape: Tuple[int, int]) -> tf.Tensor:
         """
         Tile anchors over all feature map positions
 
@@ -58,7 +58,7 @@ class AnchorGenerator(object):
         --------
         tf.Tensor of shape [BATCH, N_BOXES, 4]
         """
-        def arange(limit):
+        def arange(limit: int) -> tf.Tensor:
             return tf.range(0., tf.cast(limit, tf.float32), dtype=tf.float32)
         
         h = feature_map_shape[0]
@@ -112,7 +112,7 @@ class AnchorGenerator(object):
 
         return tf.constant(anchors, dtype=tf.float32)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.aspect_ratios) * len(self.anchor_scales)
 
 
@@ -176,8 +176,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     h = tf.cast(im_shape[1], tf.float32)
     w = tf.cast(im_shape[2], tf.float32) 
 
-    n_anchors = tf.shape(anchors)[0]
-
     result = compute_gt_annotations(anchors, 
                                     bndboxes,
                                     negative_overlap, 
@@ -188,15 +186,21 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     x_anchor_centre = (anchors[:, 0] + anchors[:, 2]) / 2.
     y_anchor_centre = (anchors[:, 1] + anchors[:, 3]) / 2.
 
-    out_x = tf.greater_equal(x_anchor_centre, w)
-    out_y = tf.greater_equal(y_anchor_centre, h)
+    larger_x = tf.greater_equal(x_anchor_centre, w)
+    lesser_x = tf.less(x_anchor_centre, 0)
+    out_x = tf.logical_or(larger_x, lesser_x)
+
+    larger_y = tf.greater_equal(y_anchor_centre, h)
+    lesser_y = tf.less(y_anchor_centre, 0)
+    out_y = tf.logical_or(larger_y, lesser_y)
+
     out_mask = tf.logical_or(out_x, out_y)
     ignore_indices = tf.logical_or(ignore_indices, out_mask)
 
     # Gather classification labels
     chose_labels = tf.gather_nd(labels, argmax_overlaps_inds)
     chose_labels = tf.reshape(chose_labels, [batch_size, -1])
-    
+
     # Labels per anchor 
     # if is positive index add the class, else 0
     # To ignore the label add -1
@@ -209,7 +213,6 @@ def anchor_targets_bbox(anchors: tf.Tensor,
     # Add regression for each anchor
     chose_bndboxes = tf.gather_nd(bndboxes, argmax_overlaps_inds)
     chose_bndboxes = tf.reshape(chose_bndboxes, [batch_size, -1, 4])
-    regression_per_anchor = tf.zeros([batch_size, n_anchors, 4])
     regression_per_anchor = bbox_transform(anchors, chose_bndboxes)
     
     # Generate extra label to add the state of the label. 
@@ -227,10 +230,10 @@ def anchor_targets_bbox(anchors: tf.Tensor,
 
 def compute_gt_annotations(anchors: tf.Tensor,
                            annotations: tf.Tensor,
-                           negative_overlap=0.4,
-                           positive_overlap=0.5) -> Tuple[tf.Tensor,
-                                                          tf.Tensor,
-                                                          tf.Tensor]:
+                           negative_overlap: float = 0.4,
+                           positive_overlap: float = 0.5) -> Tuple[tf.Tensor,
+                                                                   tf.Tensor,
+                                                                   tf.Tensor]:
     """ 
     Obtain indices of gt annotations with the greatest overlap.
     
@@ -269,15 +272,15 @@ def compute_gt_annotations(anchors: tf.Tensor,
     max_overlaps = tf.reduce_max(overlaps, axis=-1)
     
     # Generate index like [batch_idx, max_overlap]	
-    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32) 	
-    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1), 	
-                                  batched_indices)	
-    batched_indices = tf.reshape(batched_indices, [-1, 1])	
-    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])	
-    batched_indices = tf.concat([batched_indices, argmax_inds], -1)	
+    batched_indices = tf.ones([batch_size, n_anchors], dtype=tf.int32)
+    batched_indices = tf.multiply(tf.expand_dims(tf.range(batch_size), -1),
+                                  batched_indices)
+    batched_indices = tf.reshape(batched_indices, [-1, 1])
+    argmax_inds = tf.reshape(argmax_overlaps_inds, [-1, 1])
+    batched_indices = tf.concat([batched_indices, argmax_inds], -1)
 
     # Assign positive indices. 
-    positive_indices = tf.greater_equal(max_overlaps, positive_overlap) 
+    positive_indices = tf.greater_equal(max_overlaps, positive_overlap)
     
     # Assign ignored boxes
     ignore_indices = tf.greater(max_overlaps, negative_overlap)
@@ -291,23 +294,24 @@ def compute_gt_annotations(anchors: tf.Tensor,
 def bbox_transform(anchors: tf.Tensor, gt_boxes: tf.Tensor) -> tf.Tensor:
     """Compute bounding-box regression targets for an image."""
 
-    mean = tf.constant([0., 0., 0., 0.])
-    std = np.array([0.2, 0.2, 0.2, 0.2])
-
     anchors = tf.cast(anchors, tf.float32)
     gt_boxes = tf.cast(gt_boxes, tf.float32)
 
-    anchor_widths  = anchors[..., 2] - anchors[..., 0]
-    anchor_heights = anchors[..., 3] - anchors[..., 1]
+    Px = (anchors[..., 0] + anchors[..., 2]) / 2.
+    Py = (anchors[..., 1] + anchors[..., 3]) / 2.
+    Pw = anchors[..., 2] - anchors[..., 0]
+    Ph = anchors[..., 3] - anchors[..., 1]
 
-    targets_dx1 = (gt_boxes[..., 0] - anchors[..., 0]) / anchor_widths
-    targets_dy1 = (gt_boxes[..., 1] - anchors[..., 1]) / anchor_heights
-    targets_dx2 = (gt_boxes[..., 2] - anchors[..., 2]) / anchor_widths
-    targets_dy2 = (gt_boxes[..., 3] - anchors[..., 3]) / anchor_heights
+    Gx = (gt_boxes[..., 0] + gt_boxes[..., 2]) / 2.
+    Gy = (gt_boxes[..., 1] + gt_boxes[..., 3]) / 2.
+    Gw = gt_boxes[..., 2] - gt_boxes[..., 0]
+    Gh = gt_boxes[..., 3] - gt_boxes[..., 1]
 
-    targets = tf.stack(
-        [targets_dx1, targets_dy1, targets_dx2, targets_dy2], axis=-1)
-
-    targets = (targets - mean) / std
-
+    tx = (Gx - Px) / Pw
+    ty = (Gy - Py) / Ph
+    tw = tf.math.log(Gw / Pw)
+    th = tf.math.log(Gh / Ph)
+    
+    targets = tf.stack([tx, ty, tw, th], axis=-1)
+    
     return targets
