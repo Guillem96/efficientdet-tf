@@ -27,7 +27,7 @@ $pip install git+https://github.com/Guillem96/efficientdet-tf
 Currently this EfficientDet implementation supports training with 2 data formats:
 
 - **labelme format**. This format corresponds to the [labelme](https://github.com/wkentaro/labelme)
-annotations outputs.
+annotations outputs. See a training example [here](https://github.com/Guillem96/efficientdet-tf/blob/master/examples/Train_EfficientDet_with_Labelme_Dataset.ipynb) 🔥🔥. 
 
 - **VOC2007 format**. The format corresponds to the one described [here](http://host.robots.ox.ac.uk/pascal/VOC/voc2007/).
 
