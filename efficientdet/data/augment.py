@@ -103,11 +103,10 @@ def crop(image: tf.Tensor,
 
     return crop_im, (labels, boxes)
 
-
 @tf.function
 def erase(image: tf.Tensor, 
           annots: Annotation,
-          patch_aspect_ratio: Tuple[float, float] = (.15, .15)) \
+          patch_aspect_ratio: Tuple[float, float] = (.2, .2)) \
               -> ObjectDetectionInstance:
 
     im_shape = tf.shape(image)
@@ -116,28 +115,33 @@ def erase(image: tf.Tensor,
     w = tf.cast(w, tf.float32)
     
     # Generate patch
-    h_prop = tf.random.uniform(shape=[1], 
-                               minvalue=0, 
-                               maxvalue=patch_aspect_ratio[0])
-    w_prop = tf.random.uniform(shape=[1], 
-                               minvalue=0, 
-                               maxvalue=patch_aspect_ratio[1])
+    h_prop = tf.random.uniform(shape=[], 
+                               minval=0, 
+                               maxval=patch_aspect_ratio[0])
+    w_prop = tf.random.uniform(shape=[], 
+                               minval=0, 
+                               maxval=patch_aspect_ratio[1])
     patch_h = tf.cast(tf.multiply(h, h_prop), tf.int32)
     patch_w = tf.cast(tf.multiply(w, w_prop), tf.int32)
     patch = tf.zeros([patch_h, patch_w], tf.float32)
 
     # Generate random location for patches
-    x = tf.random.uniform(shape=[1], maxval=w - patch_w, dtype=tf.int32)
-    y = tf.random.uniform(shape=[1], maxval=h - patch_h, dtype=tf.int32)
+    x = tf.random.uniform(shape=[1], 
+                          maxval=tf.cast(w, tf.int32) - patch_w, 
+                          dtype=tf.int32)
+    y = tf.random.uniform(shape=[1], 
+                          maxval=tf.cast(h, tf.int32) - patch_h, 
+                          dtype=tf.int32)
     
     # Pad patch with ones so it has the same shape as the image
-    paddings = tf.constant([
-        [x, y], 
-        [tf.cast(w, tf.int32) - x - patch_w, 
-         tf.cast(h, tf.int32) - y - patch_h]], tf.int32)
+    pad_vert = tf.concat([y, tf.cast(h, tf.int32) - y - patch_h], axis=0)
+    pad_hor = tf.concat([x, tf.cast(w, tf.int32) - x - patch_w], axis=0)
+    paddings = tf.stack([pad_vert, pad_hor])
+    paddings = tf.cast(paddings, tf.int32)
+    
     patch = tf.pad(patch, paddings, constant_values=1.)
 
-    return tf.multiply(image, patch), annots
+    return tf.multiply(image, tf.expand_dims(patch, -1)), annots
 
 
 @tf.function
@@ -189,3 +193,17 @@ class RandomCrop(Augmentation):
                 image: tf.Tensor, 
                 annot: Annotation) -> ObjectDetectionInstance:
         return crop(image, annot)
+
+
+class RandomErase(Augmentation):
+
+    def __init__(self, 
+                 prob: float = .5, 
+                 patch_proportion: Tuple[float, float] = (.2, .2)) -> None:
+        super(RandomErase, self).__init__(prob=prob)
+        self.patch_proportion = patch_proportion
+
+    def augment(self, 
+                image: tf.Tensor, 
+                annot: Annotation) -> ObjectDetectionInstance:
+        return erase(image, annot, self.patch_proportion)
