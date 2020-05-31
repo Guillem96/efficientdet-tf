@@ -60,8 +60,14 @@ class RemapLogsName(tf.keras.callbacks.Callback):
              return key.replace(old_key, new_key)
 
         return key
-
-    def on_batch_end(self, batch_idx: int, logs: dict = None) -> None:
+    
+    def update_logs(self, logs: dict = None) -> None:
         if logs is not None:
             for k in logs:
                 logs[self._new_key(k)] = logs.pop(k)
+                
+    def on_train_batch_end(self, batch_idx: int, logs: dict = None) -> None:
+        self.update_logs(logs)
+    
+    def on_test_batch_end(self, batch_idx: int, logs: dict = None) -> None:
+        self.update_logs(logs)
