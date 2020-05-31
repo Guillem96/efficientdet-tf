@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Union, Any, Tuple
 from urllib.parse import urlparse
 
-from efficientdet.models import EfficientDet
+from efficientdet.models.efficientdet import EfficientDet
 
 
 def _md5(fname: Union[Path, str]) -> str:
@@ -123,17 +123,13 @@ def load(save_dir_or_url: Union[str, Path],
         D=hp['efficientdet'],
         bidirectional=hp['bidirectional'],
         freeze_backbone=hp['freeze_backbone'],
-        training_mode=True,
         weights=None,
         **kwargs)
-    
-    model.build([None, *conf.input_size, 3])
+    model.build(tf.TensorShape([None, *conf.input_size, 3]))
 
     print('Loading model weights from {}...'.format(str(model_path)), end='')
     model.load_weights(str(model_path))
     print(' done')
-    
-    model.training_mode = False
     
     for l in model.layers:
         l.trainable = False

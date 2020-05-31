@@ -32,8 +32,7 @@ def main(**kwargs: Any) -> None:
     im = efficientdet.utils.io.load_image(kwargs['image'], im_size)
     norm_image = efficientdet.data.preprocess.normalize_image(im)
 
-    boxes, labels, scores = model(tf.expand_dims(norm_image, axis=0), 
-                                  training=False)
+    boxes, labels, scores = model.detect(tf.expand_dims(norm_image, axis=0))
 
     labels = [classes[l] for l in labels[0]]
     scores = scores[0]

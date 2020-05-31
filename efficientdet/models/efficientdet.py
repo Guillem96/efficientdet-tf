@@ -43,10 +43,6 @@ class EfficientDet(tf.keras.Model):
         on imagenet. If set to None, the backbone and the bifpn will be random
         initialized. If set to other value, both the backbone and bifpn
         will be initialized with pretrained weights
-    training_mode: bool, default False
-        If set to True, an extra layer is going to be appended on top of the 
-        model. This layer will take care of regress and filter detections.
-        Set to True when using model on inference. 
     """
     def __init__(self, 
                  num_classes: Optional[int] = None,
@@ -55,8 +51,7 @@ class EfficientDet(tf.keras.Model):
                  freeze_backbone: bool = False,
                  score_threshold: float = .1,
                  weights : Optional[str] = 'imagenet',
-                 custom_head_classifier: bool = False,
-                 training_mode: bool = False) -> None:
+                 custom_head_classifier: bool = False) -> None:
                  
         super(EfficientDet, self).__init__()
 
@@ -132,7 +127,6 @@ class EfficientDet(tf.keras.Model):
                                                    self.config.Dclass,
                                                    prefix='regress_head/')
         
-        self.training_mode = training_mode
 
         # Inference variables, won't be used during training
         self.filter_detections = models.layers.FilterDetections(
@@ -140,14 +134,10 @@ class EfficientDet(tf.keras.Model):
 
         # Load the weights if needed
         if weights is not None and weights != 'imagenet':
-            tmp = training_mode
-            self.training_mode = True
             self.build([None, *self.config.input_size, 3])
             self.load_weights(str(save_dir / 'model.h5'),
                               by_name=True,
                               skip_mismatch=custom_head_classifier)
-            self.training_mode = tmp
-            self.training_mode = tmp
 
             # Append a custom classifier
             if custom_head_classifier:
@@ -163,9 +153,10 @@ class EfficientDet(tf.keras.Model):
     def score_threshold(self, value: float) -> None:
         self.filter_detections.score_threshold = value
 
+    @tf.function
     def call(self, 
              images: tf.Tensor, 
-             training: bool = True) -> Union[TrainingOut, InferenceOut]:
+             training: bool = None) -> TrainingOut:
         """
         EfficientDet forward step
 
@@ -176,7 +167,6 @@ class EfficientDet(tf.keras.Model):
             Wether if model is training or it is in inference mode
 
         """
-        training = training and self.training_mode
         features = self.backbone(images, training=training)
         
         # List of [BATCH, H, W, C]
@@ -196,10 +186,11 @@ class EfficientDet(tf.keras.Model):
         # [BATCH, -1, num_classes]
         class_scores = tf.concat(class_scores, axis=1)
 
-        if self.training_mode:
-            return bboxes, class_scores
-        else:
-            return self.filter_detections(images, bboxes, class_scores)
+        return bboxes, class_scores
+    
+    def detect(self, images: tf.Tensor) -> InferenceOut:
+        bboxes, class_scores = self(images, training=False)
+        return self.filter_detections(images, bboxes, class_scores)
     
     @staticmethod
     def from_pretrained(checkpoint_path: Union[Path, str], 

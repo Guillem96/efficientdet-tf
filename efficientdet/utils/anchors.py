@@ -80,7 +80,7 @@ class AnchorGenerator(object):
         # shift anchors (K, A, 4)
         # reshape to (K*A, 4) shifted anchors
         A = len(self)
-        K = shifts.shape[0]
+        K = tf.shape(shifts)[0]
     
         all_anchors = (tf.reshape(self.anchors, [1, A, 4]) 
                        + tf.cast(tf.reshape(shifts, [K, 1, 4]), tf.float32))

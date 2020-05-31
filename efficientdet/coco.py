@@ -6,6 +6,8 @@ import tensorflow as tf
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
+from efficientdet.models import EfficientDet
+
 
 def _COCO_result(image_id: int,
                  labels: tf.Tensor,
@@ -82,7 +84,7 @@ def tf_data_to_COCO(ds: tf.data.Dataset,
     return gtCOCO
 
 
-def evaluate(model: tf.keras.Model, 
+def evaluate(model: 'EfficientDet', 
              dataset: tf.data.Dataset,
              gtCOCO: COCO,
              steps: int,
@@ -93,7 +95,7 @@ def evaluate(model: tf.keras.Model,
     
     for i, (images, _) in enumerate(dataset):
         
-        bboxes, categories, scores = model(images, training=False)
+        bboxes, categories, scores = model.detect(images)
 
         for batch_idx in range(len(bboxes)):
             preds = categories[batch_idx], bboxes[batch_idx], scores[batch_idx]

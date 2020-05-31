@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 def call_cascade(layers: Sequence[tf.keras.layers.Layer], 
-                 inp: Any, training: bool = True) -> Any:
+                 inp: Any, training: bool = None) -> Any:
     """
     Calls a set of layers using the output as cascade.
 

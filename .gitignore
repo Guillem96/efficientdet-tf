@@ -26,3 +26,6 @@ compute_overlap.c
 
 # mypy
 .mypy_cache/
+
+# Tensorboard logs
+logs/

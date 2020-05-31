@@ -199,7 +199,6 @@ def nms(boxes: tf.Tensor,
         scores: List[tf.Tensor of shape [N]]
     """    
     batch_size = tf.shape(boxes)[0]
-    num_classes = tf.shape(class_scores)[-1]
     
     boxes = tf.cast(boxes, tf.float32)
     class_scores = tf.cast(class_scores, tf.float32)
@@ -207,7 +206,7 @@ def nms(boxes: tf.Tensor,
     all_boxes = []
     all_labels = []
     all_scores = []
-
+    
     for batch_idx in range(batch_size):
         c_scores = tf.gather(class_scores, batch_idx)
         c_boxes = tf.gather(boxes, batch_idx)

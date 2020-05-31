@@ -20,11 +20,13 @@ class RetinaNetBBPredictor(tf.keras.Model):
             layers.ConvBlock(
                 width, 
                 kernel_size=3,
-                activation='swish',
-                padding='same',
                 separable=True,
+                depth_multiplier=1,
+                padding='same',
+                activation='swish',
                 pointwise_initializer=tf.initializers.VarianceScaling(),
                 depthwise_initializer=tf.initializers.VarianceScaling(),
+                bias_initializer=tf.zeros_initializer(),
                 prefix=prefix + f'conv_block_{i}/')
             for i in range(depth)]
 
@@ -33,15 +35,18 @@ class RetinaNetBBPredictor(tf.keras.Model):
             depth_multiplier=1,
             pointwise_initializer=tf.initializers.VarianceScaling(),
             depthwise_initializer=tf.initializers.VarianceScaling(),
+            bias_initializer=tf.zeros_initializer(),
             kernel_size=3,
             padding='same',
             name=prefix + 'regress_conv')
 
-    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, features: tf.Tensor, training: bool = None) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
 
-        x = tf_utils.call_cascade(
-            self.feature_extractors, features, training=training)
+        x = tf_utils.call_cascade(self.feature_extractors, 
+                                  features, 
+                                  training=training)
+
         return tf.reshape(self.bb_regressor(x), [batch_size, -1, 4])
 
 
@@ -65,9 +70,10 @@ class RetinaNetClassifier(tf.keras.Model):
                 padding='same',
                 prefix=prefix + f'conv_block_{i}/',
                 separable=True,
+                depth_multiplier=1,
                 pointwise_initializer=tf.initializers.VarianceScaling(),
                 depthwise_initializer=tf.initializers.VarianceScaling(),
-                bias_initializer='zeros')
+                bias_initializer=tf.zeros_initializer())
 
             for i in range(depth)]
         
@@ -84,10 +90,11 @@ class RetinaNetClassifier(tf.keras.Model):
             bias_initializer=w_init,
             name=prefix + 'clf_conv')
 
-    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, features: tf.Tensor, training: bool = None) -> tf.Tensor:
         batch_size = tf.shape(features)[0]
 
-        x = tf_utils.call_cascade(
-            self.feature_extractors, features, training=training)
-        return tf.reshape(self.cls_score(x), [batch_size, -1, self.num_classes])
-
+        x = tf_utils.call_cascade(self.feature_extractors, 
+                                  features, 
+                                  training=training)
+        return tf.reshape(self.cls_score(x), 
+                          [batch_size, -1, self.num_classes])

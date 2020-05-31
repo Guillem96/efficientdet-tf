@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 import efficientdet
-from .callbacks import COCOmAPCallback
+from .callbacks import COCOmAPCallback, LogLearningRate, RemapLogsName
 
 
 def train(config: efficientdet.config.EfficientDetCompudScaling, 
@@ -32,8 +32,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             weights=kwargs['from_pretrained'],
             num_classes=len(class2idx),
             custom_head_classifier=True,
-            freeze_backbone=kwargs['freeze_backbone'],
-            training_mode=True)
+            freeze_backbone=kwargs['freeze_backbone'])
 
         print('Training from a pretrained model...')
         print('This will override any configuration related to EfficientNet'
@@ -44,8 +43,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
             D=kwargs['efficientdet'],
             bidirectional=kwargs['bidirectional'],
             freeze_backbone=kwargs['freeze_backbone'],
-            weights='imagenet',
-            training_mode=True)
+            weights='imagenet')
 
     if kwargs['w_scheduler']:
         lr = efficientdet.optim.WarmupCosineDecayLRScheduler(
@@ -56,7 +54,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     else:
         lr = kwargs['learning_rate']
 
-    optimizer = tfa.optimizers.AdamW(learning_rate=lr,
+    optimizer = tfa.optimizers.SGDW(learning_rate=lr,
                                      weight_decay=4e-5)
 
     # Declare loss functions
@@ -76,7 +74,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
                   loss_weights=[1., 1.])
 
     # Mock calls to create model specs
-    model.build([None, *im_size, 3])
+    model.build(tf.TensorShape([None, *im_size, 3]))
     model.summary()
 
     if kwargs['checkpoint'] is not None:
@@ -86,12 +84,17 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     kwargs.update(n_classes=len(class2idx))
     json.dump(kwargs, (save_checkpoint_dir / 'hp.json').open('w'))
 
-    callbacks = [COCOmAPCallback(val_ds, 
+    callbacks = [RemapLogsName({'output_1': 'regression', 
+                                'output_2': 'classification'}),
+                 COCOmAPCallback(val_ds, 
                                  class2idx, 
                                  print_freq=kwargs['print_freq'],
                                  validate_every=kwargs['validate_freq']),
                  tf.keras.callbacks.ModelCheckpoint(weights_file, 
-                                                    save_best_only=True)]
+                                                    save_best_only=True),
+                LogLearningRate(),
+                tf.keras.callbacks.TensorBoard(update_freq='batch', 
+                                               write_graph=True)]
 
     model.fit(wrapped_ds.repeat(),
               validation_data=wrapped_val_ds, 
@@ -183,6 +186,7 @@ def VOC(ctx: click.Context, **kwargs: Any) -> None:
     
     train_ds.map(efficientdet.augment.RandomCrop())
     train_ds.map(efficientdet.augment.RandomHorizontalFlip())
+    train_ds.map(efficientdet.augment.RandomErase())
     
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 
@@ -196,9 +200,9 @@ def VOC(ctx: click.Context, **kwargs: Any) -> None:
             shuffle=False)
     
         valid_ds = valid_ds.padded_batch(batch_size=kwargs['batch_size'],
-                                        padded_shapes=((*im_size, 3), 
+                                         padded_shapes=((*im_size, 3), 
                                                         ((None,), (None, 4))),
-                                        padding_values=(0., (-1, -1.)))
+                                         padding_values=(0., (-1, -1.)))
     else:
         valid_ds = None
 
@@ -243,6 +247,7 @@ def labelme(ctx: click.Context, **kwargs: Any) -> None:
     
     train_ds.map(efficientdet.augment.RandomHorizontalFlip())
     train_ds.map(efficientdet.augment.RandomCrop())
+    train_ds.map(efficientdet.augment.RandomErase())
 
     train_ds = train_ds.padded_batch(batch_size=kwargs['batch_size'],
                                      padded_shapes=((*im_size, 3), 

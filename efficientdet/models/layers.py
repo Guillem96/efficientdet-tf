@@ -6,25 +6,69 @@ from efficientdet.config import AnchorsConfig
 from efficientdet.utils import bndbox, anchors
 
 
-class Resize(tf.keras.layers.Layer):
+class Resample(tf.keras.layers.Layer):
 
-    def __init__(self, features: int, prefix: str = '') -> None:
-        super(Resize, self).__init__()
+    def __init__(self, 
+                 shape: Tuple[int, int], 
+                 features: int, prefix: str = '') -> None:
+        super(Resample, self).__init__()
+        self.target_h = shape[0]
+        self.target_w = shape[1]
+        self.features = features
+        self.prefix = prefix
+
         self.antialiasing_conv = ConvBlock(features,
-                                           separable=True,
-                                           kernel_size=3, 
+                                           separable=False,
+                                           kernel_size=1, 
                                            padding='same',
-                                           prefix=prefix + 'conv_block/')
+                                           prefix=prefix + 'pixel_wise/')
+
+    def build(self, input_shape: Tuple[int, int, int, int]) -> None:
+        _, self.height, self.width, self.num_channels = input_shape.as_list()
+        stride_h = (self.height - 1) // self.target_h + 1
+        stride_w = (self.width - 1) // self.target_w + 1
+        
+        self.max_pool = tf.keras.layers.MaxPooling2D(
+            pool_size=(stride_h + 1, stride_w + 1),
+            strides=(stride_h, stride_w),
+            padding='same',
+            name=self.prefix + 'pool')
+        
+        h_scale = self.target_h // self.height
+        w_scale = self.target_w // self.width
+
+        self.upsample = tf.keras.layers.UpSampling2D((h_scale, w_scale))
+
+    def _maybe_apply_1x1(self, 
+                         images: tf.Tensor, 
+                         training: bool = None) -> tf.Tensor:
+        if self.num_channels != self.features:
+            images = self.antialiasing_conv(images, training=training)
+        return images
 
     def call(self, 
              images: tf.Tensor, 
-             target_dim: Tuple[int, int, int, int] = None, 
-             training: bool = True) -> tf.Tensor:
-        h, w = target_dim[1], target_dim[2] # type: ignore[index]
+             training: bool = None) -> tf.Tensor:
 
-        x = tf.image.resize(images, [h, w], method='nearest')
-        x = self.antialiasing_conv(x, training=training)
+        if self.height > self.target_h and self.width > self.target_w:
+            x = self.max_pool(images)
+        elif self.height <= self.target_h and self.width <= self.target_w:
+            x = self.upsample(images)
+        else:
+            input_shape = (self.height, self.width, self.num_channels)
+            target_shape = (self.target_h, self.target_w, self.features)
+
+            raise ValueError(f'Inconsistent image shapes. Input {input_shape} '
+                             f'and target {target_shape}')
+
+        x = self._maybe_apply_1x1(x, training=training)
+
         return x 
+    
+    def compute_output_shape(self, 
+                             input_shape: tf.TensorShape) -> tf.TensorShape:
+        return tf.TensorShape(
+            [None, self.target_h, self.target_w, self.features])
 
 
 class ConvBlock(tf.keras.layers.Layer):
@@ -58,9 +102,13 @@ class ConvBlock(tf.keras.layers.Layer):
             self.activation = tf.keras.layers.Activation('linear',
                 name=prefix + 'linear')
 
-    def call(self, x: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, x: tf.Tensor, training: bool = None) -> tf.Tensor:
         x = self.bn(self.conv(x), training=training)
         return self.activation(x)
+
+    def compute_output_shape(self, 
+                             input_shape: tf.TensorShape) -> tf.TensorShape:
+        return self.conv.compute_output_shape(input_shape)
 
 
 class FilterDetections(object):

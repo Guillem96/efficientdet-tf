@@ -10,7 +10,7 @@ class Merge(tf.keras.layers.Layer):
     def __init__(self, features: int = 64) -> None:
         super(Merge, self).__init__()
         
-        self.resize = layers.Resize(features)
+        self.resize = layers.Resample(features)
         self.conv = layers.ConvBlock(features,
                                      kernel_size=3,
                                      strides=1,
@@ -18,7 +18,7 @@ class Merge(tf.keras.layers.Layer):
                                      activation='swish',
                                      padding='same')
                                      
-    def call(self, features: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, features: tf.Tensor, training: bool = None) -> tf.Tensor:
         a, b = features
         b = self.resize(b, a.shape, training=training)
         return self.conv(a + b)
@@ -53,7 +53,7 @@ class FPN(tf.keras.Model):
         
     def call(self, 
              features: tf.Tensor, 
-             training: bool = True) -> Sequence[tf.Tensor]:
+             training: bool = None) -> Sequence[tf.Tensor]:
         _, _, *C = features
 
         P3, P4, P5 = [self.pointwises[i](C[i]) for i in range(3)]
