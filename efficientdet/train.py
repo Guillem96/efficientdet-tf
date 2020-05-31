@@ -54,8 +54,7 @@ def train(config: efficientdet.config.EfficientDetCompudScaling,
     else:
         lr = kwargs['learning_rate']
 
-    optimizer = tfa.optimizers.SGDW(learning_rate=lr,
-                                     weight_decay=4e-5)
+    optimizer = tfa.optimizers.SGDW(learning_rate=lr, weight_decay=4e-5)
 
     # Declare loss functions
     regression_loss_fn = efficientdet.losses.EfficientDetHuberLoss()

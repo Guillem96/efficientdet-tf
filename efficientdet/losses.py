@@ -7,33 +7,35 @@ import tensorflow_addons as tfa
 
 from .utils import bndbox
 
-def focal_loss(y_true: tf.Tensor,
-               y_pred: tf.Tensor,
-               gamma: float = 1.5,
+def focal_loss(gamma: float = 1.5,
                alpha: float = 0.25,
                from_logits: bool = False,
-               reduction: str = 'sum') -> tf.Tensor:
+               reduction: str = 'sum'):
 
-    if from_logits:
-        y_pred = tf.sigmoid(y_pred)
-    
-    epsilon = 1e-6
-    y_pred = tf.clip_by_value(y_pred, epsilon, 1. - epsilon)
-    y_true = tf.cast(y_true, tf.float32)
+    def _fl(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
 
-    alpha = tf.ones_like(y_true) * alpha 
-    alpha = tf.where(tf.equal(y_true, 1.), alpha, 1 - alpha)
-    
-    pt = tf.where(tf.equal(y_true, 1.), y_pred, 1 - y_pred)
-    
-    loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
-    
-    if reduction == 'mean':
-        return tf.reduce_mean(loss)
-    elif reduction == 'sum':
-        return tf.reduce_sum(loss)
+        if from_logits:
+            y_pred = tf.sigmoid(y_pred)
+        
+        epsilon = 1e-6
+        y_pred = tf.clip_by_value(y_pred, epsilon, 1. - epsilon)
+        y_true = tf.cast(y_true, tf.float32)
 
-    return loss
+        alpha = tf.ones_like(y_true) * alpha 
+        alpha = tf.where(tf.equal(y_true, 1.), alpha, 1 - alpha)
+        
+        pt = tf.where(tf.equal(y_true, 1.), y_pred, 1 - y_pred)
+        
+        loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
+        
+        if reduction == 'mean':
+            return tf.reduce_mean(loss)
+        elif reduction == 'sum':
+            return tf.reduce_sum(loss)
+
+        return loss
+
+    return _fl
 
 
 def huber_loss(y_true: tf.Tensor, 
@@ -62,6 +64,7 @@ def huber_loss(y_true: tf.Tensor,
 
 
 class EfficientDetFocalLoss(tf.keras.losses.Loss):
+
     def __init__(self, alpha: float = 0.25, gamma: float = 1.5) -> None:
         super(EfficientDetFocalLoss, self).__init__()
         self.alpha = alpha

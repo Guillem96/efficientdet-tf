@@ -78,7 +78,7 @@ class FastFusion(tf.keras.layers.Layer):
 
         # wi has to be larger than 0 -> Apply ReLU
         w = self.relu(self.w)
-        w_sum = EPSILON + tf.add_n(w)
+        w_sum = EPSILON + tf.reduce_sum(w)
 
         # [INPUTS, BATCH, H, W, C]
         weighted_inputs = [
