@@ -19,7 +19,7 @@ class COCOmAPCallback(tf.keras.callbacks.Callback):
         self.class2idx = class2idx
         self.validate_every = validate_every
         self.print_freq = print_freq
-
+    
     def on_epoch_end(self, epoch: int, logs: dict = None) -> None:
         if (epoch + 1) % self.validate_every == 0:
             coco.evaluate(self.model, 
@@ -70,4 +70,7 @@ class RemapLogsName(tf.keras.callbacks.Callback):
         self.update_logs(logs)
     
     def on_test_batch_end(self, batch_idx: int, logs: dict = None) -> None:
+        self.update_logs(logs)
+    
+    def on_epoch_end(self, epoch: int, logs: dict = None) -> None:
         self.update_logs(logs)
